@@ -3,8 +3,11 @@
   --ink: #1a1a1a;
   --muted: #5c5c5c;
   --line: #d8d8d8;
-  --surface: #f7f7f5;
   --accent: #008060;
+  --preview-primary: #B9A3FF;
+  --preview-secondary: #FFFFFF;
+  --preview-text: #FF61DF;
+  --preview-accent: #94FFB2;
 }
 
 * {
@@ -13,7 +16,7 @@
 
 body {
   margin: 0;
-  min-width: 320px;
+  min-width: 340px;
   font: 13px/1.4 "IBM Plex Sans", "Segoe UI", sans-serif;
   color: var(--ink);
   background:
@@ -24,6 +27,11 @@ body {
   padding: 16px;
   display: grid;
   gap: 12px;
+}
+
+.header {
+  display: grid;
+  gap: 4px;
 }
 
 h1 {
@@ -38,17 +46,64 @@ h1 {
   color: var(--muted);
 }
 
-.hint code {
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 11px;
+.swatches {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  height: 28px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--line);
 }
 
-.field {
+.swatches span {
+  display: block;
+  height: 100%;
+}
+
+.swatches .primary {
+  background: var(--preview-primary);
+}
+
+.swatches .secondary {
+  background: var(--preview-secondary);
+}
+
+.swatches .text {
+  background: var(--preview-text);
+}
+
+.swatches .accent {
+  background: var(--preview-accent);
+}
+
+.colours {
   display: grid;
-  gap: 6px;
+  gap: 8px;
+}
+
+.colourRow {
+  display: grid;
+  grid-template-columns: 72px 40px 1fr;
+  align-items: center;
+  gap: 8px;
+}
+
+.colourLabel {
   font-weight: 600;
 }
 
+.colourRow input[type="color"] {
+  width: 40px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  cursor: pointer;
+}
+
+.hex,
 .field input {
   width: 100%;
   padding: 8px 10px;
@@ -58,6 +113,12 @@ h1 {
   font: inherit;
   font-family: "IBM Plex Mono", ui-monospace, monospace;
   font-size: 12px;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+  font-weight: 600;
 }
 
 .checkbox {
@@ -81,6 +142,12 @@ h1 {
   color: var(--accent);
 }
 
+.actions {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
 button {
   appearance: none;
   border: 0;
@@ -93,6 +160,21 @@ button {
   cursor: pointer;
 }
 
+button.secondary {
+  background: #1a1a1a;
+}
+
+button.ghost {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--line);
+}
+
 button:hover {
   filter: brightness(0.95);
+}
+
+button.ghost:hover {
+  filter: none;
+  background: rgba(0, 0, 0, 0.04);
 }

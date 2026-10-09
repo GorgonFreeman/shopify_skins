@@ -62,6 +62,18 @@ function formatThemeInput(theme) {
   return theme.useGradient ? `${ base },true` : base;
 }
 
+function formatThemeCsv(theme) {
+  const header = 'primary,secondary,text,accent,use_gradient';
+  const row = [
+    theme.primary,
+    theme.secondary,
+    theme.text,
+    theme.accent,
+    theme.useGradient ? 'true' : 'false',
+  ].join(',');
+  return `${ header }\n${ row }\n`;
+}
+
 function mix(a, b, amountA) {
   return `color-mix(in srgb, ${ a } ${ amountA }%, ${ b })`;
 }

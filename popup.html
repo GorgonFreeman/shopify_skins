@@ -8,14 +8,74 @@
   </head>
   <body>
     <main class="popup">
-      <h1>Shopify Skins</h1>
-      <p class="hint">
-        Slack-style theme:
-        <code>#primary,#secondary,#text,#accent</code>
-      </p>
+      <header class="header">
+        <h1>Shopify Skins</h1>
+        <p class="hint">Colours update the admin live.</p>
+      </header>
+
+      <div class="swatches" id="swatches" aria-hidden="true"></div>
+
+      <div class="colours">
+        <label class="colourRow" for="primaryHex">
+          <span class="colourLabel">Primary</span>
+          <input id="primaryColour" type="color" value="#B9A3FF" />
+          <input
+            id="primaryHex"
+            class="hex"
+            type="text"
+            spellcheck="false"
+            autocomplete="off"
+            maxlength="7"
+          />
+        </label>
+
+        <label class="colourRow" for="secondaryHex">
+          <span class="colourLabel">Secondary</span>
+          <input id="secondaryColour" type="color" value="#FFFFFF" />
+          <input
+            id="secondaryHex"
+            class="hex"
+            type="text"
+            spellcheck="false"
+            autocomplete="off"
+            maxlength="7"
+          />
+        </label>
+
+        <label class="colourRow" for="textHex">
+          <span class="colourLabel">Text</span>
+          <input id="textColour" type="color" value="#FF61DF" />
+          <input
+            id="textHex"
+            class="hex"
+            type="text"
+            spellcheck="false"
+            autocomplete="off"
+            maxlength="7"
+          />
+        </label>
+
+        <label class="colourRow" for="accentHex">
+          <span class="colourLabel">Accent</span>
+          <input id="accentColour" type="color" value="#94FFB2" />
+          <input
+            id="accentHex"
+            class="hex"
+            type="text"
+            spellcheck="false"
+            autocomplete="off"
+            maxlength="7"
+          />
+        </label>
+      </div>
+
+      <label class="checkbox" for="useGradient">
+        <input id="useGradient" type="checkbox" />
+        Use gradient
+      </label>
 
       <label class="field" for="themeInput">
-        Theme
+        Slack paste
         <input
           id="themeInput"
           type="text"
@@ -25,14 +85,14 @@
         />
       </label>
 
-      <label class="checkbox" for="useGradient">
-        <input id="useGradient" type="checkbox" />
-        Use gradient
-      </label>
-
       <p id="status" class="status" role="status"></p>
 
-      <button id="saveButton" type="button">Apply theme</button>
+      <div class="actions">
+        <button id="exportButton" type="button" class="secondary">
+          Export CSV
+        </button>
+        <button id="resetButton" type="button" class="ghost">Reset</button>
+      </div>
     </main>
 
     <script src="theme.js"></script>
