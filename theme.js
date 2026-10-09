@@ -66,11 +66,11 @@ function buildThemeCss(theme) {
   // Placeholder proof of concept — real selectors come next.
   return `
 :root {
-  --shopify-skins-primary: ${ theme.primary };
-  --shopify-skins-secondary: ${ theme.secondary };
-  --shopify-skins-text: ${ theme.text };
-  --shopify-skins-accent: ${ theme.accent };
-  --shopify-skins-use-gradient: ${ theme.useGradient ? '1' : '0' };
+  --shopify_skins_primary: ${ theme.primary };
+  --shopify_skins_secondary: ${ theme.secondary };
+  --shopify_skins_text: ${ theme.text };
+  --shopify_skins_accent: ${ theme.accent };
+  --shopify_skins_use_gradient: ${ theme.useGradient ? '1' : '0' };
 }
 
 html {
