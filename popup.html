@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Shopify Skins</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="popup">
+      <h1>Shopify Skins</h1>
+      <p class="hint">
+        Slack-style theme:
+        <code>#primary,#secondary,#text,#accent</code>
+      </p>
+
+      <label class="field" for="themeInput">
+        Theme
+        <input
+          id="themeInput"
+          type="text"
+          spellcheck="false"
+          autocomplete="off"
+          placeholder="#B9A3FF,#FFFFFF,#FF61DF,#94FFB2"
+        />
+      </label>
+
+      <label class="checkbox" for="useGradient">
+        <input id="useGradient" type="checkbox" />
+        Use gradient
+      </label>
+
+      <p id="status" class="status" role="status"></p>
+
+      <button id="saveButton" type="button">Apply theme</button>
+    </main>
+
+    <script src="theme.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>

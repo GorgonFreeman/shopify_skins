@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Shopify Skins",
+  "description": "Apply custom Slack-style colour themes to the Shopify admin.",
+  "version": "0.1.0",
+  "permissions": [
+    "storage"
+  ],
+  "action": {
+    "default_title": "Shopify Skins",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://admin.shopify.com/store/*"
+      ],
+      "js": [
+        "theme.js",
+        "content.js"
+      ],
+      "run_at": "document_start"
+    }
+  ]
+}
