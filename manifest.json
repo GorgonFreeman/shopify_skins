@@ -1,8 +1,13 @@
 {
   "manifest_version": 3,
   "name": "Shopify Skins",
-  "description": "Apply custom Slack-style colour themes to the Shopify admin.",
-  "version": "0.3.0",
+  "description": "Apply custom Slack-style colour themes to the Shopify admin, with optional theme rename.",
+  "version": "0.3.4",
+  "icons": {
+    "16": "icons/icon_16.png",
+    "48": "icons/icon_48.png",
+    "128": "icons/icon_128.png"
+  },
   "permissions": [
     "storage",
     "tabs"
@@ -15,7 +20,12 @@
   },
   "action": {
     "default_title": "Shopify Skins",
-    "default_popup": "popup.html"
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon_16.png",
+      "48": "icons/icon_48.png",
+      "128": "icons/icon_128.png"
+    }
   },
   "content_scripts": [
     {
@@ -25,7 +35,20 @@
       "js": [
         "theme_storage.js",
         "colour_scheme.js",
+        "settings.js",
         "content.js",
+        "rename.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true
+    },
+    {
+      "matches": [
+        "https://online-store-web.shopifyapps.com/*"
+      ],
+      "js": [
+        "theme_storage.js",
+        "settings.js",
         "rename.js"
       ],
       "run_at": "document_start",

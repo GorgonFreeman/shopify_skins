@@ -93,16 +93,13 @@
       <hr class="divider" />
 
       <section class="apiSection">
-        <h2>Theme rename</h2>
-        <p class="hint">
-          Click the pencil next to a theme name in admin. Uses Shopify Admin
-          GraphQL <code>themeUpdate</code>. Tokens are stored per store.
-        </p>
+        <h2>API functionalities</h2>
+        <p class="hint">Enter your API key to enable</p>
 
         <p id="tokenStoreHint" class="hint"></p>
 
         <label class="field" for="accessToken">
-          Admin API token
+          API key
           <input
             id="accessToken"
             type="password"
@@ -110,6 +107,15 @@
             autocomplete="off"
             placeholder="shpat_…"
           />
+        </label>
+
+        <label
+          class="checkbox is-api-gated"
+          for="themeRenameEnabled"
+          id="themeRenameRow"
+        >
+          <input id="themeRenameEnabled" type="checkbox" disabled />
+          Renaming themes
         </label>
       </section>
 

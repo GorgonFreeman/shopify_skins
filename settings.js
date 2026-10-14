@@ -4,6 +4,7 @@ const DEFAULT_SETTINGS = {
   // Legacy single token (migrated into accessTokensByStore on read).
   accessToken: '',
   accessTokensByStore: {},
+  themeRenameEnabled: false,
 };
 
 async function loadSettings() {

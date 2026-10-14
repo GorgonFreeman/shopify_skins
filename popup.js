@@ -21,6 +21,8 @@ const colourSchemeEnabled = document.getElementById('colourSchemeEnabled');
 const useGradient = document.getElementById('useGradient');
 const themeInput = document.getElementById('themeInput');
 const accessToken = document.getElementById('accessToken');
+const themeRenameEnabled = document.getElementById('themeRenameEnabled');
+const themeRenameRow = document.getElementById('themeRenameRow');
 const tokenStoreHint = document.getElementById('tokenStoreHint');
 const exportButton = document.getElementById('exportButton');
 const resetButton = document.getElementById('resetButton');
@@ -188,16 +190,43 @@ async function resetTheme() {
   setStatus('Reset to default.', 'ok');
 }
 
+function syncApiGatedUi() {
+  const hasKey = Boolean(accessToken.value.trim());
+  themeRenameEnabled.disabled = !hasKey;
+  themeRenameRow.classList.toggle('is-enabled', hasKey);
+
+  if (!hasKey && themeRenameEnabled.checked) {
+    themeRenameEnabled.checked = false;
+  }
+}
+
 function scheduleSaveSettings() {
   if (settingsTimer) {
     clearTimeout(settingsTimer);
   }
   settingsTimer = setTimeout(async () => {
-    await saveTokenForStore(activeStoreHandle, accessToken.value.trim());
+    const token = accessToken.value.trim();
+    await saveTokenForStore(activeStoreHandle, token);
+
+    const settings = await loadSettings();
+    const renameOn = Boolean(token) && themeRenameEnabled.checked;
+    themeRenameEnabled.checked = renameOn;
+    syncApiGatedUi();
+
+    await saveSettings({
+      ...settings,
+      themeRenameEnabled: renameOn,
+    });
+
+    if (!token) {
+      setStatus('Enter an API key to enable API features.', '');
+      return;
+    }
+
     setStatus(
       activeStoreHandle
-        ? `Token saved for ${ activeStoreHandle }.`
-        : 'Token saved locally.',
+        ? `API key saved for ${ activeStoreHandle }.`
+        : 'API key saved locally.',
       'ok',
     );
   }, 120);
@@ -245,8 +274,15 @@ themeInput.addEventListener('keydown', (event) => {
 });
 exportButton.addEventListener('click', exportCsv);
 resetButton.addEventListener('click', resetTheme);
-accessToken.addEventListener('change', scheduleSaveSettings);
-accessToken.addEventListener('input', scheduleSaveSettings);
+accessToken.addEventListener('change', () => {
+  syncApiGatedUi();
+  scheduleSaveSettings();
+});
+accessToken.addEventListener('input', () => {
+  syncApiGatedUi();
+  scheduleSaveSettings();
+});
+themeRenameEnabled.addEventListener('change', scheduleSaveSettings);
 
 async function hydrate() {
   const storeHandle = await resolveActiveStoreHandle();
@@ -256,14 +292,17 @@ async function hydrate() {
   ]);
   writeThemeToForm(theme);
   accessToken.value = tokenForStore(settings, storeHandle) || '';
+  const hasKey = Boolean(accessToken.value.trim());
+  themeRenameEnabled.checked = hasKey && settings.themeRenameEnabled === true;
+  syncApiGatedUi();
   tokenStoreHint.textContent = storeHandle
     ? `Store: ${ storeHandle }`
-    : 'Open a store admin tab to bind this token to a shop.';
+    : 'Open a store admin tab to bind this key to a shop.';
 
   if (popupParams.get('focus') === 'token') {
     accessToken.focus();
     accessToken.select();
-    setStatus('Paste an Admin API token for this store, then retry rename.', 'ok');
+    setStatus('Paste an API key for this store, then enable Renaming themes.', 'ok');
   } else {
     setStatus(
       theme.colourSchemeEnabled === false

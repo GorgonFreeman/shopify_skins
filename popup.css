@@ -167,6 +167,26 @@ h1 {
   font-weight: 650;
 }
 
+.checkbox.is-api-gated {
+  opacity: 0.45;
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.checkbox.is-api-gated input {
+  cursor: not-allowed;
+}
+
+.checkbox.is-api-gated.is-enabled {
+  opacity: 1;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.checkbox.is-api-gated.is-enabled input {
+  cursor: pointer;
+}
+
 .actions {
   display: grid;
   grid-template-columns: 1fr auto;

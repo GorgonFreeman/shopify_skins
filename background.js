@@ -201,14 +201,42 @@ async function openExtensionPopup({
   }
 }
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+function storeHandleFromUrl(url) {
+  const match = String(url || '').match(/admin\.shopify\.com\/store\/([^/?#]+)/);
+  if (match) {
+    return match[1];
+  }
+  const shop = String(url || '').match(/[?&](?:shop|store)=([^&]+)/i);
+  if (shop) {
+    return decodeURIComponent(shop[1])
+      .replace(/\.myshopify\.com$/i, '')
+      .split('.')[0] || null;
+  }
+  return null;
+}
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type === 'shopifySkinsGetTabContext') {
+    const tabUrl = sender?.tab?.url || '';
+    sendResponse({
+      ok: true,
+      data: {
+        tabUrl,
+        storeHandle: storeHandleFromUrl(tabUrl),
+      },
+    });
+    return false;
+  }
+
   if (message?.type === 'shopifySkinsGetToken') {
+    const storeHandle = message.payload?.storeHandle
+      || storeHandleFromUrl(sender?.tab?.url);
     loadSettings()
       .then((settings) => sendResponse({
         ok: true,
         data: {
-          accessToken: tokenForStore(settings, message.payload?.storeHandle),
-          storeHandle: message.payload?.storeHandle || null,
+          accessToken: tokenForStore(settings, storeHandle),
+          storeHandle: storeHandle || null,
         },
       }))
       .catch((error) => sendResponse({
@@ -256,7 +284,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return false;
   }
 
-  renameTheme(message.payload || {})
+  const payload = {
+    ...(message.payload || {}),
+  };
+  if (!payload.storeHandle) {
+    payload.storeHandle = storeHandleFromUrl(sender?.tab?.url);
+  }
+
+  renameTheme(payload)
     .then(async (result) => {
       if (
         !result?.ok
@@ -265,7 +300,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         try {
           await openExtensionPopup({
             focusToken: true,
-            storeHandle: message.payload?.storeHandle || '',
+            storeHandle: payload.storeHandle || '',
           });
         } catch (_error) {
           // Rename error still returned below.
