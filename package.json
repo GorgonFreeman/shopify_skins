@@ -1,13 +1,6 @@
 {
   "name": "shopify_skins",
   "private": true,
-  "version": "0.2.0",
-  "description": "Chrome extension for Shopify admin skins and theme rename.",
-  "scripts": {
-    "mineral": "node node_modules/@foxtware/mineral/server.js --workspace .",
-    "mineral:serve": "PORT=8000 npm run mineral"
-  },
-  "dependencies": {
-    "@foxtware/mineral": "^1.0.8"
-  }
+  "version": "0.2.3",
+  "description": "Chrome extension for Shopify admin skins and theme rename."
 }

@@ -21,12 +21,15 @@ const colourSchemeEnabled = document.getElementById('colourSchemeEnabled');
 const useGradient = document.getElementById('useGradient');
 const themeInput = document.getElementById('themeInput');
 const accessToken = document.getElementById('accessToken');
-const mineralUrl = document.getElementById('mineralUrl');
+const tokenStoreHint = document.getElementById('tokenStoreHint');
 const exportButton = document.getElementById('exportButton');
 const resetButton = document.getElementById('resetButton');
 const status = document.getElementById('status');
 const swatches = document.getElementById('swatches');
 const popup = document.querySelector('.popup');
+
+const popupParams = new URLSearchParams(location.search);
+let activeStoreHandle = popupParams.get('store') || '';
 
 let saveTimer = null;
 let settingsTimer = null;
@@ -153,6 +156,7 @@ function applyFromSlackPaste() {
   try {
     const parsed = parseThemeInput(themeInput.value);
     parsed.useGradient = useGradient.checked || parsed.useGradient;
+    parsed.colourSchemeEnabled = colourSchemeEnabled.checked;
     writeThemeToForm(parsed);
     scheduleSave(parsed);
     setStatus('Imported Slack theme.', 'ok');
@@ -189,12 +193,36 @@ function scheduleSaveSettings() {
     clearTimeout(settingsTimer);
   }
   settingsTimer = setTimeout(async () => {
-    await saveSettings({
-      accessToken: accessToken.value.trim(),
-      mineralUrl: mineralUrl.value.trim() || DEFAULT_SETTINGS.mineralUrl,
-    });
-    setStatus('Rename settings saved locally.', 'ok');
+    await saveTokenForStore(activeStoreHandle, accessToken.value.trim());
+    setStatus(
+      activeStoreHandle
+        ? `Token saved for ${ activeStoreHandle }.`
+        : 'Token saved locally.',
+      'ok',
+    );
   }, 120);
+}
+
+async function resolveActiveStoreHandle() {
+  if (activeStoreHandle) {
+    return activeStoreHandle;
+  }
+
+  try {
+    const tabs = await chrome.tabs.query({
+      active: true,
+      currentWindow: true,
+    });
+    const url = tabs?.[0]?.url || '';
+    const match = url.match(/admin\.shopify\.com\/store\/([^/?#]+)/);
+    if (match) {
+      activeStoreHandle = match[1];
+    }
+  } catch (_error) {
+    // Popup may be a detached window without tab access.
+  }
+
+  return activeStoreHandle;
 }
 
 for (const key of Object.keys(colourFields)) {
@@ -219,18 +247,32 @@ exportButton.addEventListener('click', exportCsv);
 resetButton.addEventListener('click', resetTheme);
 accessToken.addEventListener('change', scheduleSaveSettings);
 accessToken.addEventListener('input', scheduleSaveSettings);
-mineralUrl.addEventListener('change', scheduleSaveSettings);
-mineralUrl.addEventListener('input', scheduleSaveSettings);
 
 async function hydrate() {
+  const storeHandle = await resolveActiveStoreHandle();
   const [theme, settings] = await Promise.all([
     loadTheme(),
     loadSettings(),
   ]);
   writeThemeToForm(theme);
-  accessToken.value = settings.accessToken || '';
-  mineralUrl.value = settings.mineralUrl || DEFAULT_SETTINGS.mineralUrl;
-  setStatus('Live on admin.', 'ok');
+  accessToken.value = tokenForStore(settings, storeHandle) || '';
+  tokenStoreHint.textContent = storeHandle
+    ? `Store: ${ storeHandle }`
+    : 'Open a store admin tab to bind this token to a shop.';
+
+  if (popupParams.get('focus') === 'token') {
+    accessToken.focus();
+    accessToken.select();
+    setStatus('Paste an Admin API token for this store, then retry rename.', 'ok');
+  } else {
+    setStatus(
+      theme.colourSchemeEnabled === false
+        ? 'Colour scheme off.'
+        : 'Live on admin.',
+      'ok',
+    );
+  }
 }
 
 hydrate();
+

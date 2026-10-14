@@ -1,20 +1,39 @@
 importScripts('settings.js');
 
-async function renameThemeViaMineral({
+const SHOPIFY_API_VERSION = '2025-10';
+
+const THEME_UPDATE_MUTATION = `
+  mutation themeUpdate($id: ID!, $input: OnlineStoreThemeInput!) {
+    themeUpdate(id: $id, input: $input) {
+      theme {
+        id
+        name
+      }
+      userErrors {
+        field
+        message
+      }
+    }
+  }
+`.trim();
+
+async function renameTheme({
   storeHandle,
   themeId,
   name,
+  accessToken: accessTokenOverride,
 }) {
   const settings = await loadSettings();
-  const accessToken = String(settings.accessToken || '').trim();
-  const mineralUrl = String(settings.mineralUrl || DEFAULT_SETTINGS.mineralUrl).replace(/\/$/, '');
+  const accessToken = String(
+    accessTokenOverride || tokenForStore(settings, storeHandle) || '',
+  ).trim();
 
   if (!accessToken) {
     return {
       ok: false,
       error: {
         code: 'MISSING_TOKEN',
-        message: 'Add a Shopify Admin API access token in the Shopify Skins popup.',
+        message: 'An Admin API token is required to rename themes.',
       },
     };
   }
@@ -29,23 +48,23 @@ async function renameThemeViaMineral({
     };
   }
 
+  const url = `https://${ storeHandle }.myshopify.com/admin/api/${ SHOPIFY_API_VERSION }/graphql.json`;
+
   let response;
   try {
-    response = await fetch(`${ mineralUrl }/shopifyThemeUpdate`, {
+    response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'X-Shopify-Access-Token': accessToken,
       },
       body: JSON.stringify({
-        credsPayload: {
-          credsObject: {
-            STORE_HANDLE: storeHandle,
-            API_KEY: accessToken,
+        query: THEME_UPDATE_MUTATION,
+        variables: {
+          id: `gid://shopify/OnlineStoreTheme/${ themeId }`,
+          input: {
+            name,
           },
-        },
-        themeId: String(themeId),
-        updatePayload: {
-          name,
         },
       }),
     });
@@ -53,8 +72,8 @@ async function renameThemeViaMineral({
     return {
       ok: false,
       error: {
-        code: 'MINERAL_UNREACHABLE',
-        message: `Could not reach mineral at ${ mineralUrl }. Run npm run mineral in shopify_skins.`,
+        code: 'NETWORK_ERROR',
+        message: 'Could not reach Shopify Admin API.',
         details: String(error?.message || error),
       },
     };
@@ -68,33 +87,192 @@ async function renameThemeViaMineral({
       ok: false,
       error: {
         code: 'BAD_RESPONSE',
-        message: `Mineral returned non-JSON (${ response.status }).`,
+        message: `Shopify returned non-JSON (${ response.status }).`,
         details: String(error?.message || error),
       },
     };
   }
 
-  if (!response.ok && payload?.ok !== true) {
+  if (response.status === 401 || response.status === 403) {
     return {
       ok: false,
-      error: payload?.error || {
-        code: 'HTTP_ERROR',
-        message: `Mineral HTTP ${ response.status }`,
+      error: {
+        code: 'AUTH_ERROR',
+        message: 'Token rejected for this store. Enter a token for the current shop.',
         details: payload,
       },
     };
   }
 
-  return payload;
+  if (!response.ok) {
+    return {
+      ok: false,
+      error: {
+        code: 'HTTP_ERROR',
+        message: payload?.errors?.[0]?.message || `Shopify HTTP ${ response.status }`,
+        details: payload,
+      },
+    };
+  }
+
+  if (payload?.errors?.length) {
+    const message = payload.errors.map((error) => error.message).filter(Boolean).join('; ');
+    const authish = /access|denied|unauthorized|forbidden|token/i.test(message);
+    return {
+      ok: false,
+      error: {
+        code: authish ? 'AUTH_ERROR' : 'GRAPHQL_ERROR',
+        message: message || 'GraphQL error',
+        details: payload.errors,
+      },
+    };
+  }
+
+  const themeUpdate = payload?.data?.themeUpdate;
+  const userErrors = themeUpdate?.userErrors || [];
+  if (userErrors.length) {
+    return {
+      ok: false,
+      error: {
+        code: 'USER_ERROR',
+        message: userErrors.map((error) => error.message).filter(Boolean).join('; ') || 'Rename failed',
+        details: userErrors,
+      },
+    };
+  }
+
+  return {
+    ok: true,
+    data: {
+      theme: themeUpdate?.theme,
+    },
+  };
+}
+
+async function openExtensionPopup({
+  focusToken = false,
+  storeHandle = '',
+} = {}) {
+  const params = new URLSearchParams();
+  if (focusToken) {
+    params.set('focus', 'token');
+  }
+  if (storeHandle) {
+    params.set('store', storeHandle);
+  }
+  const query = params.toString();
+  const popupPath = query ? `popup.html?${ query }` : 'popup.html';
+
+  await chrome.action.setPopup({
+    popup: popupPath,
+  });
+
+  try {
+    if (chrome.action.openPopup) {
+      await chrome.action.openPopup();
+      return {
+        ok: true,
+        data: {
+          mode: 'action',
+        },
+      };
+    }
+    throw new Error('openPopup unavailable');
+  } catch (error) {
+    await chrome.windows.create({
+      url: chrome.runtime.getURL(popupPath),
+      type: 'popup',
+      width: 380,
+      height: 580,
+      focused: true,
+    });
+    return {
+      ok: true,
+      data: {
+        mode: 'window',
+        fallback: String(error?.message || error),
+      },
+    };
+  } finally {
+    // Restore the default toolbar popup path.
+    await chrome.action.setPopup({
+      popup: 'popup.html',
+    });
+  }
 }
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type === 'shopifySkinsGetToken') {
+    loadSettings()
+      .then((settings) => sendResponse({
+        ok: true,
+        data: {
+          accessToken: tokenForStore(settings, message.payload?.storeHandle),
+          storeHandle: message.payload?.storeHandle || null,
+        },
+      }))
+      .catch((error) => sendResponse({
+        ok: false,
+        error: {
+          code: 'UNEXPECTED',
+          message: String(error?.message || error),
+        },
+      }));
+    return true;
+  }
+
+  if (message?.type === 'shopifySkinsSaveToken') {
+    saveTokenForStore(
+      message.payload?.storeHandle,
+      message.payload?.accessToken,
+    )
+      .then(() => sendResponse({
+        ok: true,
+      }))
+      .catch((error) => sendResponse({
+        ok: false,
+        error: {
+          code: 'UNEXPECTED',
+          message: String(error?.message || error),
+        },
+      }));
+    return true;
+  }
+
+  if (message?.type === 'shopifySkinsOpenPopup') {
+    openExtensionPopup(message.payload || {})
+      .then((result) => sendResponse(result))
+      .catch((error) => sendResponse({
+        ok: false,
+        error: {
+          code: 'POPUP_FAILED',
+          message: String(error?.message || error),
+        },
+      }));
+    return true;
+  }
+
   if (message?.type !== 'shopifySkinsRenameTheme') {
     return false;
   }
 
-  renameThemeViaMineral(message.payload || {})
-    .then((result) => sendResponse(result))
+  renameTheme(message.payload || {})
+    .then(async (result) => {
+      if (
+        !result?.ok
+        && ['MISSING_TOKEN', 'AUTH_ERROR'].includes(result?.error?.code)
+      ) {
+        try {
+          await openExtensionPopup({
+            focusToken: true,
+            storeHandle: message.payload?.storeHandle || '',
+          });
+        } catch (_error) {
+          // Rename error still returned below.
+        }
+      }
+      sendResponse(result);
+    })
     .catch((error) => sendResponse({
       ok: false,
       error: {
@@ -105,3 +283,4 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   return true;
 });
+

@@ -2,13 +2,13 @@
   "manifest_version": 3,
   "name": "Shopify Skins",
   "description": "Apply custom Slack-style colour themes to the Shopify admin.",
-  "version": "0.2.2",
+  "version": "0.2.5",
   "permissions": [
-    "storage"
+    "storage",
+    "tabs"
   ],
   "host_permissions": [
-    "http://127.0.0.1/*",
-    "http://localhost/*"
+    "https://*.myshopify.com/*"
   ],
   "background": {
     "service_worker": "background.js"

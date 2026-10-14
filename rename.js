@@ -1,7 +1,17 @@
 (() => {
   const MAX_THEME_NAME_LENGTH = 50;
   const EDITING_ATTR = 'data-shopify-skins-renaming';
+  const BUTTON_ATTR = 'data-shopify-skins-rename-btn';
+  const TEAL = '#0D9488';
+  const PENCIL_SVG = `
+    <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+      <path d="M13.586 3.586a2 2 0 0 1 2.828 2.828l-.793.793-2.828-2.828.793-.793ZM12.379 4.793 3 14.172V17h2.828l9.379-9.379-2.828-2.828Z"/>
+    </svg>
+  `.trim();
+
   let editing = false;
+  let decorateTimer = null;
+  let currentTheme = DEFAULT_THEME;
 
   function parseAdminContext(url = location.href) {
     const storeMatch = url.match(/admin\.shopify\.com\/store\/([^/?#]+)/);
@@ -36,21 +46,14 @@
     return parseAdminContext().themeId;
   }
 
-  function isEditableTarget(element) {
-    if (!(element instanceof Element)) {
-      return false;
-    }
-    if (element.closest(`[${ EDITING_ATTR }]`)) {
-      return false;
-    }
-    if (element.closest('input, textarea, select, [contenteditable="true"]')) {
-      return false;
-    }
-    return true;
-  }
-
   function looksLikeThemeName(element) {
     if (!(element instanceof HTMLElement)) {
+      return false;
+    }
+    if (element.matches(`[${ BUTTON_ATTR }]`)) {
+      return false;
+    }
+    if (element.closest(`[${ BUTTON_ATTR }]`)) {
       return false;
     }
 
@@ -58,16 +61,22 @@
     if (!text || text.length > MAX_THEME_NAME_LENGTH + 10) {
       return false;
     }
+    if (element.querySelector('input, textarea, button, svg')) {
+      return false;
+    }
     if (element.children.length > 2) {
       return false;
     }
 
     const tag = element.tagName;
-    if (['H1', 'H2', 'H3', 'H4', 'SPAN', 'P', 'A', 'DIV', 'BUTTON'].includes(tag)) {
-      return true;
-    }
+    return ['H1', 'H2', 'H3', 'H4', 'SPAN', 'P', 'A', 'DIV'].includes(tag);
+  }
 
-    return Boolean(element.closest('a[href*="/themes/"]'));
+  function pencilColour() {
+    if (currentTheme.colourSchemeEnabled === false) {
+      return TEAL;
+    }
+    return currentTheme.accent || DEFAULT_THEME.accent;
   }
 
   function toast(message, kind = 'ok') {
@@ -105,7 +114,6 @@
     labelEl.removeAttribute(EDITING_ATTR);
     labelEl.innerHTML = originalHtml;
 
-    // Prefer updating the deepest text-bearing leaf so structure stays intact.
     const walker = document.createTreeWalker(labelEl, NodeFilter.SHOW_TEXT);
     const textNode = walker.nextNode();
     if (textNode) {
@@ -114,6 +122,16 @@
     }
 
     labelEl.textContent = text;
+  }
+
+  function openTokenPopup(storeHandle) {
+    return chrome.runtime.sendMessage({
+      type: 'shopifySkinsOpenPopup',
+      payload: {
+        focusToken: true,
+        storeHandle,
+      },
+    });
   }
 
   function renameInBackground({
@@ -131,9 +149,25 @@
         themeId,
         name,
       },
-    }).then((result) => {
+    }).then(async (result) => {
       if (!result?.ok) {
         restoreLabel(labelEl, originalHtml, previousName);
+        scheduleDecorate();
+        const code = result?.error?.code;
+        if (code === 'MISSING_TOKEN' || code === 'AUTH_ERROR') {
+          try {
+            await openTokenPopup(storeHandle);
+          } catch (_error) {
+            // Toast still explains what to do.
+          }
+          toast(
+            code === 'MISSING_TOKEN'
+              ? 'Add an Admin API token in Shopify Skins, then try again.'
+              : (result?.error?.message || 'Token rejected for this store.'),
+            'error',
+          );
+          return;
+        }
         toast(result?.error?.message || 'Rename failed.', 'error');
         return;
       }
@@ -142,9 +176,11 @@
       if (confirmedName !== name) {
         restoreLabel(labelEl, originalHtml, confirmedName);
       }
+      scheduleDecorate();
       toast(`Renamed to “${ confirmedName }”.`, 'ok');
     }).catch((error) => {
       restoreLabel(labelEl, originalHtml, previousName);
+      scheduleDecorate();
       toast(error?.message || 'Rename failed.', 'error');
     });
   }
@@ -166,6 +202,13 @@
 
     editing = true;
     labelEl.setAttribute(EDITING_ATTR, 'true');
+
+    // Hide nearby pencil while editing this label.
+    labelEl.parentElement
+      ?.querySelectorAll(`[${ BUTTON_ATTR }]`)
+      .forEach((button) => {
+        button.style.display = 'none';
+      });
 
     const input = document.createElement('input');
     input.type = 'text';
@@ -202,11 +245,12 @@
 
       if (!save || !nextName || nextName === previousName) {
         restoreLabel(labelEl, originalHtml, previousName);
+        scheduleDecorate();
         return;
       }
 
-      // Optimistic: restore original markup with the new name immediately.
       restoreLabel(labelEl, originalHtml, nextName);
+      scheduleDecorate();
 
       renameInBackground({
         storeHandle,
@@ -236,27 +280,160 @@
     });
   }
 
-  document.addEventListener('dblclick', (event) => {
-    const target = event.target;
-    if (!isEditableTarget(target)) {
+  function collectThemeNameTargets() {
+    const targets = new Set();
+    const { themeId } = parseAdminContext();
+
+    document.querySelectorAll('a[href*="/themes/"]').forEach((link) => {
+      if (!/\/themes\/\d+/.test(link.href)) {
+        return;
+      }
+
+      const nested = link.querySelector('h1, h2, h3, h4, span, p');
+      if (nested && looksLikeThemeName(nested)) {
+        targets.add(nested);
+        return;
+      }
+
+      if (looksLikeThemeName(link)) {
+        targets.add(link);
+      }
+    });
+
+    if (themeId) {
+      document.querySelectorAll('h1, h2, h3').forEach((heading) => {
+        if (looksLikeThemeName(heading) && findThemeIdNear(heading)) {
+          targets.add(heading);
+        }
+      });
+    }
+
+    return [...targets];
+  }
+
+  function ensurePencilButton(labelEl) {
+    if (labelEl.getAttribute(EDITING_ATTR) === 'true') {
       return;
     }
 
-    let candidate = target;
-    if (!looksLikeThemeName(candidate)) {
-      candidate = target.closest?.('a[href*="/themes/"] h1, a[href*="/themes/"] h2, a[href*="/themes/"] h3, a[href*="/themes/"] span, a[href*="/themes/"] p, h1, h2, h3');
-    }
-
-    if (!candidate || !looksLikeThemeName(candidate)) {
+    const themeId = findThemeIdNear(labelEl);
+    if (!themeId) {
       return;
     }
 
-    if (!findThemeIdNear(candidate) && !parseAdminContext().themeId) {
+    const parent = labelEl.parentElement;
+    if (!parent) {
       return;
     }
 
-    event.preventDefault();
-    event.stopPropagation();
-    beginRename(candidate);
-  }, true);
+    let button = null;
+    const next = labelEl.nextElementSibling;
+    if (next?.hasAttribute?.(BUTTON_ATTR) && next.dataset.themeId === themeId) {
+      button = next;
+    } else {
+      button = parent.querySelector(`[${ BUTTON_ATTR }][data-theme-id="${ themeId }"]`);
+      if (button && button.previousElementSibling !== labelEl) {
+        labelEl.insertAdjacentElement('afterend', button);
+      }
+    }
+
+    if (!button) {
+      button = document.createElement('button');
+      button.type = 'button';
+      button.setAttribute(BUTTON_ATTR, 'true');
+      button.dataset.themeId = themeId;
+      button.title = 'Rename theme';
+      button.setAttribute('aria-label', 'Rename theme');
+      button.innerHTML = PENCIL_SVG;
+      button.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        beginRename(labelEl);
+      });
+      labelEl.insertAdjacentElement('afterend', button);
+    }
+
+    const colour = pencilColour();
+    button.style.cssText = [
+      'display:inline-flex',
+      'align-items:center',
+      'justify-content:center',
+      'width:28px',
+      'height:28px',
+      'margin-left:6px',
+      'padding:0',
+      'border:0',
+      'border-radius:8px',
+      'background:transparent',
+      `color:${ colour }`,
+      'cursor:pointer',
+      'vertical-align:middle',
+      'flex:0 0 auto',
+    ].join(';');
+  }
+
+  function decorateThemeNames() {
+    if (editing) {
+      return;
+    }
+
+    // Drop orphaned buttons whose labels disappeared.
+    document.querySelectorAll(`[${ BUTTON_ATTR }]`).forEach((button) => {
+      const label = button.previousElementSibling;
+      if (!label || !document.contains(label)) {
+        button.remove();
+      }
+    });
+
+    collectThemeNameTargets().forEach((labelEl) => {
+      ensurePencilButton(labelEl);
+    });
+  }
+
+  function scheduleDecorate() {
+    if (decorateTimer) {
+      clearTimeout(decorateTimer);
+    }
+    decorateTimer = setTimeout(() => {
+      decorateThemeNames();
+    }, 120);
+  }
+
+  async function refreshTheme() {
+    try {
+      currentTheme = await loadTheme();
+    } catch (_error) {
+      currentTheme = DEFAULT_THEME;
+    }
+    scheduleDecorate();
+  }
+
+  refreshTheme();
+
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === 'sync' && changes[THEME_STORAGE_KEY]) {
+      refreshTheme();
+    }
+  });
+
+  const observer = new MutationObserver(() => {
+    scheduleDecorate();
+  });
+
+  observer.observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+  });
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', scheduleDecorate, {
+      once: true,
+    });
+  } else {
+    scheduleDecorate();
+  }
+
+  window.addEventListener('load', scheduleDecorate, {
+    once: true,
+  });
 })();

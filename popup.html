@@ -95,9 +95,11 @@
       <section class="apiSection">
         <h2>Theme rename</h2>
         <p class="hint">
-          Double-click a theme name in admin. Powered by mineral
-          <code>shopifyThemeUpdate</code>.
+          Click the pencil next to a theme name in admin. Uses Shopify Admin
+          GraphQL <code>themeUpdate</code>. Tokens are stored per store.
         </p>
+
+        <p id="tokenStoreHint" class="hint"></p>
 
         <label class="field" for="accessToken">
           Admin API token
@@ -107,17 +109,6 @@
             spellcheck="false"
             autocomplete="off"
             placeholder="shpat_…"
-          />
-        </label>
-
-        <label class="field" for="mineralUrl">
-          Mineral URL
-          <input
-            id="mineralUrl"
-            type="url"
-            spellcheck="false"
-            autocomplete="off"
-            placeholder="http://127.0.0.1:8000"
           />
         </label>
       </section>
