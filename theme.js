@@ -6,6 +6,7 @@ const DEFAULT_THEME = {
   text: '#FF61DF',
   accent: '#94FFB2',
   useGradient: false,
+  colourSchemeEnabled: true,
 };
 
 /**
@@ -151,7 +152,11 @@ function getPolarisVarEntries(theme) {
     ['--p-color-input-border', border],
     ['--p-color-input-border-hover', borderStrong],
     ['--p-color-input-border-active', accent],
-    ['--p-color-bg-app', primary],
+    // Admin shell (left nav + app frame + sticky bottom nav)
+    ['--p-color-bg', mix(primary, secondary, 55)],
+    ['--p-color-app-bg', mix(primary, secondary, 55)],
+    ['--p-color-nav-bg', mix(primary, secondary, 55)],
+    ['--p-color-bg-app', mix(primary, secondary, 55)],
     ['--p-color-bg-app-hover', primaryHover],
     ['--p-color-bg-app-selected', mix(primary, accent, 70)],
     ['--p-color-bg-app-active', primaryActive],
@@ -167,9 +172,10 @@ function buildThemeCss(theme) {
     useGradient,
   } = theme;
 
+  const shellBg = mix(primary, secondary, 55);
   const pageBg = useGradient
     ? `linear-gradient(160deg, ${ primary } 0%, ${ mix(primary, accent, 55) } 55%, ${ accent } 100%)`
-    : primary;
+    : shellBg;
 
   const vars = getPolarisVarEntries(theme);
   const varBlock = vars
@@ -180,6 +186,7 @@ function buildThemeCss(theme) {
     ':root',
     'html',
     'body',
+    '[data-admin-next]',
     '[data-polaris-custom-properties]',
     '[p-color-scheme]',
     '.Polaris-Frame',
@@ -197,6 +204,8 @@ ${ tokenTargets } {
   --shopify_skins_text: ${ text };
   --shopify_skins_accent: ${ accent };
   --shopify_skins_use_gradient: ${ useGradient ? '1' : '0' };
+  --p-color-app-bg: ${ shellBg } !important;
+  --p-color-nav-bg: ${ shellBg } !important;
 ${ varBlock }
 }
 
@@ -207,14 +216,18 @@ body,
 #AppFrameMain,
 [data-polaris-custom-properties] {
   background: ${ pageBg } !important;
-  background-color: ${ primary } !important;
+  background-color: ${ shellBg } !important;
   color: ${ text } !important;
 }
 
+/* Main admin chrome — same shell as left column */
+[data-admin-next] [class*="_AppFrame_"]:not([class*="_TransparentBackground_"]),
+[class*="_StickyBottomNav_"],
 .Polaris-Navigation,
 .Polaris-TopBar,
 #AppFrameNav {
-  background-color: ${ mix(primary, secondary, 55) } !important;
+  background-color: ${ shellBg } !important;
+  background: ${ shellBg } !important;
 }
 
 .Polaris-LegacyCard,

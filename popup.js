@@ -19,12 +19,15 @@ const colourFields = {
 
 const useGradient = document.getElementById('useGradient');
 const themeInput = document.getElementById('themeInput');
+const accessToken = document.getElementById('accessToken');
+const mineralUrl = document.getElementById('mineralUrl');
 const exportButton = document.getElementById('exportButton');
 const resetButton = document.getElementById('resetButton');
 const status = document.getElementById('status');
 const swatches = document.getElementById('swatches');
 
 let saveTimer = null;
+let settingsTimer = null;
 let applyingForm = false;
 
 function setStatus(message, kind = '') {
@@ -166,6 +169,19 @@ async function resetTheme() {
   setStatus('Reset to default.', 'ok');
 }
 
+function scheduleSaveSettings() {
+  if (settingsTimer) {
+    clearTimeout(settingsTimer);
+  }
+  settingsTimer = setTimeout(async () => {
+    await saveSettings({
+      accessToken: accessToken.value.trim(),
+      mineralUrl: mineralUrl.value.trim() || DEFAULT_SETTINGS.mineralUrl,
+    });
+    setStatus('Rename settings saved locally.', 'ok');
+  }, 120);
+}
+
 for (const key of Object.keys(colourFields)) {
   colourFields[key].colour.addEventListener('input', () => syncHexFromColour(key));
   colourFields[key].hex.addEventListener('change', () => syncColourFromHex(key));
@@ -185,10 +201,19 @@ themeInput.addEventListener('keydown', (event) => {
 });
 exportButton.addEventListener('click', exportCsv);
 resetButton.addEventListener('click', resetTheme);
+accessToken.addEventListener('change', scheduleSaveSettings);
+accessToken.addEventListener('input', scheduleSaveSettings);
+mineralUrl.addEventListener('change', scheduleSaveSettings);
+mineralUrl.addEventListener('input', scheduleSaveSettings);
 
 async function hydrate() {
-  const theme = await loadTheme();
+  const [theme, settings] = await Promise.all([
+    loadTheme(),
+    loadSettings(),
+  ]);
   writeThemeToForm(theme);
+  accessToken.value = settings.accessToken || '';
+  mineralUrl.value = settings.mineralUrl || DEFAULT_SETTINGS.mineralUrl;
   setStatus('Live on admin.', 'ok');
 }
 

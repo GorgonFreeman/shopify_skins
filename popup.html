@@ -85,6 +85,38 @@
         />
       </label>
 
+      <hr class="divider" />
+
+      <section class="apiSection">
+        <h2>Theme rename</h2>
+        <p class="hint">
+          Double-click a theme name in admin. Powered by mineral
+          <code>shopifyThemeUpdate</code>.
+        </p>
+
+        <label class="field" for="accessToken">
+          Admin API token
+          <input
+            id="accessToken"
+            type="password"
+            spellcheck="false"
+            autocomplete="off"
+            placeholder="shpat_…"
+          />
+        </label>
+
+        <label class="field" for="mineralUrl">
+          Mineral URL
+          <input
+            id="mineralUrl"
+            type="url"
+            spellcheck="false"
+            autocomplete="off"
+            placeholder="http://127.0.0.1:8000"
+          />
+        </label>
+      </section>
+
       <p id="status" class="status" role="status"></p>
 
       <div class="actions">
@@ -96,6 +128,7 @@
     </main>
 
     <script src="theme.js"></script>
+    <script src="settings.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>

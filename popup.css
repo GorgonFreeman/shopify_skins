@@ -142,6 +142,23 @@ h1 {
   color: var(--accent);
 }
 
+.divider {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 4px 0;
+}
+
+.apiSection {
+  display: grid;
+  gap: 10px;
+}
+
+.apiSection h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+}
+
 .actions {
   display: grid;
   grid-template-columns: 1fr auto;
