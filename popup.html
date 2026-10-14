@@ -13,9 +13,14 @@
         <p class="hint">Colours update the admin live.</p>
       </header>
 
+      <label class="checkbox" for="colourSchemeEnabled">
+        <input id="colourSchemeEnabled" type="checkbox" checked />
+        Colour scheme
+      </label>
+
       <div class="swatches" id="swatches" aria-hidden="true"></div>
 
-      <div class="colours">
+      <div class="colours" id="colourControls">
         <label class="colourRow" for="primaryHex">
           <span class="colourLabel">Primary</span>
           <input id="primaryColour" type="color" value="#B9A3FF" />

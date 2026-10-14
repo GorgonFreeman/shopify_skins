@@ -82,6 +82,14 @@ h1 {
   gap: 8px;
 }
 
+.popup.is-colour-scheme-off .colours,
+.popup.is-colour-scheme-off .swatches,
+.popup.is-colour-scheme-off label.checkbox[for="useGradient"],
+.popup.is-colour-scheme-off label.field[for="themeInput"] {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
 .colourRow {
   display: grid;
   grid-template-columns: 72px 40px 1fr;

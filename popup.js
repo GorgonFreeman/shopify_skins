@@ -17,6 +17,7 @@ const colourFields = {
   },
 };
 
+const colourSchemeEnabled = document.getElementById('colourSchemeEnabled');
 const useGradient = document.getElementById('useGradient');
 const themeInput = document.getElementById('themeInput');
 const accessToken = document.getElementById('accessToken');
@@ -25,6 +26,7 @@ const exportButton = document.getElementById('exportButton');
 const resetButton = document.getElementById('resetButton');
 const status = document.getElementById('status');
 const swatches = document.getElementById('swatches');
+const popup = document.querySelector('.popup');
 
 let saveTimer = null;
 let settingsTimer = null;
@@ -58,7 +60,12 @@ function readThemeFromForm() {
     text: colourFields.text.colour.value.toUpperCase(),
     accent: colourFields.accent.colour.value.toUpperCase(),
     useGradient: useGradient.checked,
+    colourSchemeEnabled: colourSchemeEnabled.checked,
   };
+}
+
+function syncColourSchemeUi(enabled) {
+  popup.classList.toggle('is-colour-scheme-off', !enabled);
 }
 
 function paintPreview(theme) {
@@ -82,11 +89,13 @@ function writeThemeToForm(theme) {
     colourFields[key].hex.value = hex.toUpperCase();
   }
   useGradient.checked = Boolean(theme.useGradient);
+  colourSchemeEnabled.checked = theme.colourSchemeEnabled !== false;
   themeInput.value = formatThemeInput({
     ...theme,
     useGradient: false,
   });
   paintPreview(theme);
+  syncColourSchemeUi(colourSchemeEnabled.checked);
   applyingForm = false;
 }
 
@@ -97,7 +106,12 @@ function scheduleSave(theme) {
   saveTimer = setTimeout(async () => {
     try {
       await saveTheme(theme);
-      setStatus('Live on admin.', 'ok');
+      setStatus(
+        theme.colourSchemeEnabled === false
+          ? 'Colour scheme off.'
+          : 'Live on admin.',
+        'ok',
+      );
     } catch (error) {
       setStatus(error.message || 'Could not save theme.', 'error');
     }
@@ -114,6 +128,7 @@ function applyFromForm() {
     useGradient: false,
   });
   paintPreview(theme);
+  syncColourSchemeUi(theme.colourSchemeEnabled !== false);
   scheduleSave(theme);
 }
 
@@ -192,6 +207,7 @@ for (const key of Object.keys(colourFields)) {
   });
 }
 
+colourSchemeEnabled.addEventListener('change', applyFromForm);
 useGradient.addEventListener('change', applyFromForm);
 themeInput.addEventListener('change', applyFromSlackPaste);
 themeInput.addEventListener('keydown', (event) => {

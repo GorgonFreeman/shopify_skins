@@ -245,6 +245,19 @@ body,
 `.trim();
 }
 
+function polarisVarNames(theme) {
+  return [
+    ...getPolarisVarEntries(theme).map(([name]) => name),
+    '--p-color-app-bg',
+    '--p-color-nav-bg',
+    '--shopify_skins_primary',
+    '--shopify_skins_secondary',
+    '--shopify_skins_text',
+    '--shopify_skins_accent',
+    '--shopify_skins_use_gradient',
+  ];
+}
+
 function applyPolarisVarsToElement(element, theme) {
   if (!element || !element.style) {
     return;
@@ -255,11 +268,21 @@ function applyPolarisVarsToElement(element, theme) {
   }
 }
 
-function applyPolarisVarsInDocument(theme) {
-  applyPolarisVarsToElement(document.documentElement, theme);
-  if (document.body) {
-    applyPolarisVarsToElement(document.body, theme);
+function clearPolarisVarsFromElement(element, theme) {
+  if (!element || !element.style) {
+    return;
   }
+
+  for (const name of polarisVarNames(theme)) {
+    element.style.removeProperty(name);
+  }
+}
+
+function themedRoots(theme) {
+  const elements = [
+    document.documentElement,
+    document.body,
+  ].filter(Boolean);
 
   const selectors = [
     '[data-polaris-custom-properties]',
@@ -270,20 +293,37 @@ function applyPolarisVarsInDocument(theme) {
 
   for (const selector of selectors) {
     document.querySelectorAll(selector).forEach((element) => {
-      applyPolarisVarsToElement(element, theme);
+      elements.push(element);
     });
   }
 
   document.querySelectorAll('*').forEach((element) => {
     if (element.shadowRoot) {
-      applyPolarisVarsToElement(element, theme);
+      elements.push(element);
     }
   });
+
+  return elements;
+}
+
+function applyPolarisVarsInDocument(theme) {
+  for (const element of themedRoots(theme)) {
+    applyPolarisVarsToElement(element, theme);
+  }
+}
+
+function clearPolarisVarsInDocument(theme) {
+  for (const element of themedRoots(theme)) {
+    clearPolarisVarsFromElement(element, theme);
+  }
 }
 
 async function loadTheme() {
   const result = await chrome.storage.sync.get(THEME_STORAGE_KEY);
-  return result[THEME_STORAGE_KEY] || DEFAULT_THEME;
+  return {
+    ...DEFAULT_THEME,
+    ...(result[THEME_STORAGE_KEY] || {}),
+  };
 }
 
 async function saveTheme(theme) {

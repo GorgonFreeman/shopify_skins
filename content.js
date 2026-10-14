@@ -20,8 +20,27 @@
     return style;
   }
 
+  function removeStyleElement() {
+    const style = document.getElementById(STYLE_ID);
+    if (style) {
+      style.remove();
+    }
+  }
+
+  function clearPaint(theme) {
+    removeStyleElement();
+    clearPolarisVarsInDocument(theme);
+    document.documentElement.removeAttribute('data-shopify-skins');
+  }
+
   function paint(theme) {
     lastTheme = theme;
+
+    if (theme.colourSchemeEnabled === false) {
+      clearPaint(theme);
+      return;
+    }
+
     const style = ensureStyleElement();
     style.textContent = buildThemeCss(theme);
     applyPolarisVarsInDocument(theme);
@@ -47,8 +66,8 @@
     paint(theme);
   }
 
-  // Immediate paint before storage resolves.
-  paint(DEFAULT_THEME);
+  // Only paint immediately if we don't yet know preferences;
+  // loadTheme will correct once storage resolves.
   applyTheme();
 
   if (document.readyState === 'loading') {
@@ -62,6 +81,9 @@
   });
 
   const observer = new MutationObserver(() => {
+    if (lastTheme.colourSchemeEnabled === false) {
+      return;
+    }
     scheduleApply(lastTheme);
   });
 
