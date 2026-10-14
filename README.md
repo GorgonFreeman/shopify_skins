@@ -22,6 +22,14 @@ Rename calls Shopify GraphQL `themeUpdate` directly (`STORE_HANDLE` from the adm
 
 Note: Shopify may require a `write_themes` exemption for `themeUpdate` on some apps.
 
+## Colour scheme architecture
+
+- `theme_storage.js` — palette model + chrome.storage load/save
+- `colour_scheme.js` — `ColourScheme.apply()` / `ColourScheme.unapply()` / `ColourScheme.sync()`
+- `content.js` — listens for storage + DOM remounts and calls `sync()`
+
+Toggle **Colour scheme** in the popup to apply/unapply live. From an admin console you can also run `shopifySkinsApply()` / `shopifySkinsUnapply()`.
+
 ## Load unpacked
 
 1. Open `chrome://extensions`

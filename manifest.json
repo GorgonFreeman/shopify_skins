@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Shopify Skins",
   "description": "Apply custom Slack-style colour themes to the Shopify admin.",
-  "version": "0.2.5",
+  "version": "0.3.0",
   "permissions": [
     "storage",
     "tabs"
@@ -23,7 +23,8 @@
         "https://admin.shopify.com/*"
       ],
       "js": [
-        "theme.js",
+        "theme_storage.js",
+        "colour_scheme.js",
         "content.js",
         "rename.js"
       ],
