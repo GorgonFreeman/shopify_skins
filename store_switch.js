@@ -1,17 +1,36 @@
 // Store switch: rewrite admin URLs across keyed shops.
-// Custom handlers can register for specific URL patterns; otherwise base
-// behaviour keeps the same path on another store, stripping a trailing
-// numeric resource id to the index (orders/123 → /orders, markets/9 → /markets).
+// Handlers are a map of RegExp → function. The first matching regex wins;
+// named capture groups (e.g. (?<id>\d+)) are passed into the handler.
+// Otherwise base behaviour keeps the same path on another store, stripping a
+// trailing numeric resource id to the index (orders/123 → /orders).
 
-const storeSwitchHandlers = [];
+let storeSwitchHandlers = [];
 
-function registerStoreSwitchHandler(pattern, handle) {
-  if (typeof pattern?.test !== 'function' || typeof handle !== 'function') {
-    throw new Error('registerStoreSwitchHandler requires a pattern with .test and a function');
+function coerceHandlerPattern(pattern) {
+  if (pattern instanceof RegExp) {
+    return pattern;
   }
-  storeSwitchHandlers.push({
-    pattern,
-    handle,
+  // Object keys stringify RegExps as /source/flags — revive them.
+  const raw = String(pattern);
+  const lastSlash = raw.lastIndexOf('/');
+  if (raw.startsWith('/') && lastSlash > 0) {
+    return new RegExp(raw.slice(1, lastSlash), raw.slice(lastSlash + 1));
+  }
+  return new RegExp(raw);
+}
+
+function setStoreSwitchHandlers(handlerMap) {
+  const entries = handlerMap instanceof Map
+    ? [...handlerMap.entries()]
+    : Array.isArray(handlerMap)
+      ? handlerMap
+      : Object.entries(handlerMap || {});
+
+  storeSwitchHandlers = entries.map(([pattern, handle]) => {
+    if (typeof handle !== 'function') {
+      throw new Error('store switch handlers must be functions');
+    }
+    return [coerceHandlerPattern(pattern), handle];
   });
 }
 
@@ -84,10 +103,15 @@ async function resolveStoreSwitch({
     currentStoreHandle: current || null,
   };
 
-  for (const handler of storeSwitchHandlers) {
-    if (handler.pattern.test(sourceUrl)) {
-      return handler.handle(ctx);
+  for (const [pattern, handle] of storeSwitchHandlers) {
+    const match = sourceUrl.match(pattern);
+    if (!match) {
+      continue;
     }
+    return handle({
+      ...ctx,
+      ...(match.groups || {}),
+    });
   }
 
   // Detail pages ending in a numeric id fall back to that resource's index

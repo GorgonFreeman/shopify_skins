@@ -131,11 +131,6 @@ const THEMES_BY_NAME_QUERY = `
   }
 `.trim();
 
-const PRODUCT_ADMIN_PATH = /admin\.shopify\.com\/store\/[^/?#]+\/products\/\d+/;
-const COLLECTION_ADMIN_PATH = /admin\.shopify\.com\/store\/[^/?#]+\/collections\/\d+/;
-const CUSTOMER_ADMIN_PATH = /admin\.shopify\.com\/store\/[^/?#]+\/customers\/\d+/;
-const DISCOUNT_ADMIN_PATH = /admin\.shopify\.com\/store\/[^/?#]+\/discounts\/\d+/;
-const THEME_EDITOR_ADMIN_PATH = /admin\.shopify\.com\/store\/[^/?#]+\/themes\/\d+/;
 
 async function renameTheme({
   storeHandle,
@@ -482,15 +477,6 @@ function adminResourceUrl(storeHandle, resource, id) {
   return `https://admin.shopify.com/store/${ store }/${ path }/${ resourceId }`;
 }
 
-function resourceIdFromUrl(url, resource) {
-  const path = String(resource || '').trim().replace(/^\/+|\/+$/g, '');
-  if (!path) {
-    return null;
-  }
-  const match = String(url || '').match(new RegExp(`\\/${ path }\\/(\\d+)`));
-  return match?.[1] || null;
-}
-
 function discountTitle(discountNode) {
   return String(discountNode?.discount?.title || '').trim();
 }
@@ -500,12 +486,11 @@ function escapeSearchValue(value) {
 }
 
 async function switchProductByHandle({
-  url,
+  id,
   targetStoreHandle,
   currentStoreHandle,
 }) {
-  const productId = resourceIdFromUrl(url, 'products');
-  if (!currentStoreHandle || !productId) {
+  if (!currentStoreHandle || !id) {
     return {
       ok: false,
       error: {
@@ -515,7 +500,7 @@ async function switchProductByHandle({
     };
   }
 
-  const current = await findProductHandleById(currentStoreHandle, productId);
+  const current = await findProductHandleById(currentStoreHandle, id);
   if (!current.ok) {
     return current;
   }
@@ -655,12 +640,11 @@ async function findCollectionHandleById(storeHandle, collectionId) {
 }
 
 async function switchCollectionByHandle({
-  url,
+  id,
   targetStoreHandle,
   currentStoreHandle,
 }) {
-  const collectionId = resourceIdFromUrl(url, 'collections');
-  if (!currentStoreHandle || !collectionId) {
+  if (!currentStoreHandle || !id) {
     return {
       ok: false,
       error: {
@@ -670,7 +654,7 @@ async function switchCollectionByHandle({
     };
   }
 
-  const current = await findCollectionHandleById(currentStoreHandle, collectionId);
+  const current = await findCollectionHandleById(currentStoreHandle, id);
   if (!current.ok) {
     return current;
   }
@@ -810,12 +794,11 @@ async function findCustomerByEmail(storeHandle, emailAddress) {
 }
 
 async function switchCustomerByEmail({
-  url,
+  id,
   targetStoreHandle,
   currentStoreHandle,
 }) {
-  const customerId = resourceIdFromUrl(url, 'customers');
-  if (!currentStoreHandle || !customerId) {
+  if (!currentStoreHandle || !id) {
     return {
       ok: false,
       error: {
@@ -825,7 +808,7 @@ async function switchCustomerByEmail({
     };
   }
 
-  const current = await findCustomerEmailById(currentStoreHandle, customerId);
+  const current = await findCustomerEmailById(currentStoreHandle, id);
   if (!current.ok) {
     return current;
   }
@@ -969,12 +952,11 @@ async function findDiscountByTitle(storeHandle, discountTitleValue) {
 }
 
 async function switchDiscountByName({
-  url,
+  id,
   targetStoreHandle,
   currentStoreHandle,
 }) {
-  const discountId = resourceIdFromUrl(url, 'discounts');
-  if (!currentStoreHandle || !discountId) {
+  if (!currentStoreHandle || !id) {
     return {
       ok: false,
       error: {
@@ -984,7 +966,7 @@ async function switchDiscountByName({
     };
   }
 
-  const current = await findDiscountTitleById(currentStoreHandle, discountId);
+  const current = await findDiscountTitleById(currentStoreHandle, id);
   if (!current.ok) {
     return current;
   }
@@ -1141,12 +1123,12 @@ function themeEditorUrl(storeHandle, themeId, sourceUrl) {
 }
 
 async function switchThemeByName({
+  id,
   url,
   targetStoreHandle,
   currentStoreHandle,
 }) {
-  const themeId = resourceIdFromUrl(url, 'themes');
-  if (!currentStoreHandle || !themeId) {
+  if (!currentStoreHandle || !id) {
     return {
       ok: false,
       error: {
@@ -1156,7 +1138,7 @@ async function switchThemeByName({
     };
   }
 
-  const current = await findThemeNameById(currentStoreHandle, themeId);
+  const current = await findThemeNameById(currentStoreHandle, id);
   if (!current.ok) {
     return current;
   }
@@ -1183,11 +1165,13 @@ async function switchThemeByName({
   };
 }
 
-registerStoreSwitchHandler(PRODUCT_ADMIN_PATH, switchProductByHandle);
-registerStoreSwitchHandler(COLLECTION_ADMIN_PATH, switchCollectionByHandle);
-registerStoreSwitchHandler(CUSTOMER_ADMIN_PATH, switchCustomerByEmail);
-registerStoreSwitchHandler(DISCOUNT_ADMIN_PATH, switchDiscountByName);
-registerStoreSwitchHandler(THEME_EDITOR_ADMIN_PATH, switchThemeByName);
+setStoreSwitchHandlers({
+  [/\/products\/(?<id>\d+)/]: switchProductByHandle,
+  [/\/collections\/(?<id>\d+)/]: switchCollectionByHandle,
+  [/\/customers\/(?<id>\d+)/]: switchCustomerByEmail,
+  [/\/discounts\/(?<id>\d+)/]: switchDiscountByName,
+  [/\/themes\/(?<id>\d+)/]: switchThemeByName,
+});
 
 async function openExtensionPopup({
   focusToken = false,

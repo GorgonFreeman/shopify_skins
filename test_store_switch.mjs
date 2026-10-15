@@ -13,7 +13,7 @@ const {
   rewriteAdminStoreUrl,
   stripTrailingAdminResourceId,
   resolveStoreSwitch,
-  registerStoreSwitchHandler,
+  setStoreSwitchHandlers,
   storeHandleFromAdminUrl,
 } = context;
 
@@ -21,6 +21,7 @@ const productUrl = 'https://admin.shopify.com/store/alpha-shop/products/123?quer
 const orderUrl = 'https://admin.shopify.com/store/alpha-shop/orders/18939949318204';
 const marketUrl = 'https://admin.shopify.com/store/alpha-shop/markets/27885628';
 const listUrl = 'https://admin.shopify.com/store/alpha-shop/products?query=sku';
+const collectionUrl = 'https://admin.shopify.com/store/alpha-shop/collections/456';
 
 assert.equal(
   storeHandleFromAdminUrl(productUrl),
@@ -91,27 +92,50 @@ assert.equal(stripTrailingAdminResourceId(listUrl), null);
   assert.equal(result.error.code, 'SAME_STORE');
 }
 
-registerStoreSwitchHandler(/\/products\/\d+/, async ({
-  targetStoreHandle,
-  productHandle,
-}) => {
-  assert.equal(productHandle, 'linen-shirt');
-  return {
-    ok: true,
-    url: `https://admin.shopify.com/store/${ targetStoreHandle }/products/999`,
-  };
+setStoreSwitchHandlers({
+  [/\/products\/(?<id>\d+)/]: async ({
+    id,
+    targetStoreHandle,
+  }) => {
+    assert.equal(id, '123');
+    return {
+      ok: true,
+      url: `https://admin.shopify.com/store/${ targetStoreHandle }/products/999`,
+    };
+  },
+  [/\/collections\/(?<id>\d+)/]: async ({
+    id,
+    targetStoreHandle,
+  }) => {
+    assert.equal(id, '456');
+    return {
+      ok: true,
+      url: `https://admin.shopify.com/store/${ targetStoreHandle }/collections/${ id }`,
+    };
+  },
 });
 
 {
   const result = await resolveStoreSwitch({
     url: productUrl,
     targetStoreHandle: 'beta-shop',
-    productHandle: 'linen-shirt',
   });
   assert.equal(result.ok, true);
   assert.equal(
     result.url,
     'https://admin.shopify.com/store/beta-shop/products/999',
+  );
+}
+
+{
+  const result = await resolveStoreSwitch({
+    url: collectionUrl,
+    targetStoreHandle: 'beta-shop',
+  });
+  assert.equal(result.ok, true);
+  assert.equal(
+    result.url,
+    'https://admin.shopify.com/store/beta-shop/collections/456',
   );
 }
 
