@@ -233,12 +233,32 @@ body,
     document.getElementById(STYLE_ID)?.remove();
   }
 
+  // Remember Polaris' own inline custom properties so unapply can restore them
+  // instead of leaving roots stripped (which looks like residual theming).
+  const savedInlineTokens = new WeakMap();
+
   function writeInlineTokens(element, entries) {
     if (!element?.style) {
       return;
     }
+
+    let saved = savedInlineTokens.get(element);
+    if (!saved) {
+      saved = new Map();
+      savedInlineTokens.set(element, saved);
+    }
+
     element.setAttribute(ROOT_MARK, '1');
     for (const [name, value] of entries) {
+      if (!saved.has(name)) {
+        const previous = element.style.getPropertyValue(name);
+        saved.set(name, previous
+          ? {
+            value: previous,
+            priority: element.style.getPropertyPriority(name),
+          }
+          : null);
+      }
       element.style.setProperty(name, value, 'important');
     }
   }
@@ -247,10 +267,30 @@ body,
     if (!element?.style) {
       return;
     }
+
+    const saved = savedInlineTokens.get(element);
     for (const name of tokenNames) {
-      element.style.removeProperty(name);
+      if (saved?.has(name)) {
+        const previous = saved.get(name);
+        if (previous) {
+          element.style.setProperty(
+            name,
+            previous.value,
+            previous.priority || '',
+          );
+        } else {
+          element.style.removeProperty(name);
+        }
+      } else {
+        element.style.removeProperty(name);
+      }
     }
+    savedInlineTokens.delete(element);
     element.removeAttribute(ROOT_MARK);
+  }
+
+  function collectMarkedRoots() {
+    return [...document.querySelectorAll(`[${ ROOT_MARK }]`)];
   }
 
   let isBusy = false;
@@ -273,7 +313,8 @@ body,
 
   function isApplied() {
     return document.documentElement.getAttribute(ACTIVE_MARK) === 'active'
-      || Boolean(document.getElementById(STYLE_ID));
+      || Boolean(document.getElementById(STYLE_ID))
+      || Boolean(document.querySelector(`[${ ROOT_MARK }]`));
   }
 
   /**
@@ -300,6 +341,7 @@ body,
 
   /**
    * Remove all colour-scheme overrides and restore admin defaults.
+   * Only touches nodes we previously marked — never strip Polaris roots cold.
    */
   function unapply(theme = DEFAULT_THEME) {
     const normalised = {
@@ -311,7 +353,7 @@ body,
     withBusy(() => {
       removeStyleElement();
 
-      for (const root of collectRoots()) {
+      for (const root of collectMarkedRoots()) {
         clearInlineTokens(root, tokenNames);
       }
 
