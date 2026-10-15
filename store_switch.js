@@ -38,6 +38,7 @@ async function resolveStoreSwitch({
   url,
   targetStoreHandle,
   currentStoreHandle,
+  ...rest
 } = {}) {
   const sourceUrl = String(url || '');
   const target = String(targetStoreHandle || '').trim();
@@ -66,6 +67,7 @@ async function resolveStoreSwitch({
   }
 
   const ctx = {
+    ...rest,
     url: sourceUrl,
     targetStoreHandle: target,
     currentStoreHandle: current || null,

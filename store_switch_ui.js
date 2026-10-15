@@ -4,6 +4,7 @@
   }
 
   const HOST_ID = 'shopify-skins-store-switch';
+  const PRODUCT_ADMIN_PATH = /admin\.shopify\.com\/store\/[^/?#]+\/products\/\d+/;
   const DRAG_THRESHOLD_PX = 5;
   const DEFAULT_OFFSET = {
     top: 12,
@@ -28,6 +29,100 @@
 
   function currentStoreHandle() {
     return parseAdminContext(location.href).storeHandle || '';
+  }
+
+  function isLikelyProductHandle(value) {
+    const handle = String(value || '').trim();
+    if (!handle || /^\d+$/.test(handle)) {
+      return false;
+    }
+    return /^[a-z0-9]+(?:-[a-z0-9]+)*$/i.test(handle);
+  }
+
+  function fieldIdentity(el) {
+    return [
+      el?.name,
+      el?.id,
+      el?.getAttribute?.('aria-label'),
+      el?.getAttribute?.('placeholder'),
+      el?.getAttribute?.('autocomplete'),
+    ].filter(Boolean).join(' ').toLowerCase();
+  }
+
+  function extractHandleFromProductsPath(value) {
+    const matches = String(value || '').matchAll(/\/products\/([a-z0-9][a-z0-9-]*)/gi);
+    for (const match of matches) {
+      if (isLikelyProductHandle(match[1])) {
+        return match[1];
+      }
+    }
+    return null;
+  }
+
+  function extractProductHandleFromUi() {
+    const fields = queryAllDeep('input, textarea');
+    for (const field of fields) {
+      const identity = fieldIdentity(field);
+      if (!/handle/.test(identity) || /metafield|namespace|collection/.test(identity)) {
+        continue;
+      }
+      const value = String(field.value || '').trim();
+      if (isLikelyProductHandle(value)) {
+        return value;
+      }
+      const fromPath = extractHandleFromProductsPath(value);
+      if (fromPath) {
+        return fromPath;
+      }
+    }
+
+    for (const label of queryAllDeep('label')) {
+      const text = cleanText(label).toLowerCase();
+      if (text !== 'handle' && text !== 'url handle' && !text.startsWith('url handle')) {
+        continue;
+      }
+      const forId = label.getAttribute('for');
+      const linked = forId
+        ? (document.getElementById(forId) || queryAllDeep(`#${ CSS.escape(forId) }`)[0])
+        : null;
+      const nearby = linked
+        || label.querySelector?.('input, textarea')
+        || label.parentElement?.querySelector?.('input, textarea');
+      const value = String(nearby?.value || '').trim();
+      if (isLikelyProductHandle(value)) {
+        return value;
+      }
+    }
+
+    for (const el of queryAllDeep('a, span, p, div, input, textarea')) {
+      const haystack = [
+        el.getAttribute?.('href'),
+        el.value,
+        el.textContent,
+      ].filter(Boolean).join(' ');
+      const fromPath = extractHandleFromProductsPath(haystack);
+      if (fromPath) {
+        return fromPath;
+      }
+    }
+
+    return null;
+  }
+
+  function switchContextPayload(targetStoreHandle) {
+    const payload = {
+      targetStoreHandle,
+      currentStoreHandle: currentStoreHandle(),
+    };
+
+    if (PRODUCT_ADMIN_PATH.test(location.href)) {
+      const productHandle = extractProductHandleFromUi();
+      if (productHandle) {
+        payload.productHandle = productHandle;
+      }
+    }
+
+    return payload;
   }
 
   function defaultPosition() {
@@ -168,12 +263,10 @@
     }
     const targetStoreHandle = option.dataset.storeHandle;
     setOpen(false);
+
     chrome.runtime.sendMessage({
       type: 'shopifySkinsSwitchStore',
-      payload: {
-        targetStoreHandle,
-        currentStoreHandle: currentStoreHandle(),
-      },
+      payload: switchContextPayload(targetStoreHandle),
     }).then((result) => {
       if (!result?.ok) {
         toast(result?.error?.message || 'Could not switch stores.', 'error');

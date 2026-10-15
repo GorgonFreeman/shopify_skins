@@ -51,20 +51,27 @@ assert.equal(rewriteAdminStoreUrl('https://example.com/', 'beta-shop'), null);
   assert.equal(result.error.code, 'SAME_STORE');
 }
 
-registerStoreSwitchHandler(/\/products\/\d+/, async ({ targetStoreHandle }) => ({
-  ok: true,
-  url: `https://admin.shopify.com/store/${ targetStoreHandle }/products`,
-}));
+registerStoreSwitchHandler(/\/products\/\d+/, async ({
+  targetStoreHandle,
+  productHandle,
+}) => {
+  assert.equal(productHandle, 'linen-shirt');
+  return {
+    ok: true,
+    url: `https://admin.shopify.com/store/${ targetStoreHandle }/products/999`,
+  };
+});
 
 {
   const result = await resolveStoreSwitch({
     url: sampleUrl,
     targetStoreHandle: 'beta-shop',
+    productHandle: 'linen-shirt',
   });
   assert.equal(result.ok, true);
   assert.equal(
     result.url,
-    'https://admin.shopify.com/store/beta-shop/products',
+    'https://admin.shopify.com/store/beta-shop/products/999',
   );
 }
 

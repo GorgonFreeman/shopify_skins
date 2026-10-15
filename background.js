@@ -17,6 +17,26 @@ const THEME_UPDATE_MUTATION = `
   }
 `.trim();
 
+const PRODUCT_BY_HANDLE_QUERY = `
+  query productByHandle($identifier: ProductIdentifierInput!) {
+    product: productByIdentifier(identifier: $identifier) {
+      id
+      handle
+    }
+  }
+`.trim();
+
+const PRODUCT_BY_ID_QUERY = `
+  query productById($id: ID!) {
+    product(id: $id) {
+      id
+      handle
+    }
+  }
+`.trim();
+
+const PRODUCT_ADMIN_PATH = /admin\.shopify\.com\/store\/[^/?#]+\/products\/\d+/;
+
 async function renameTheme({
   storeHandle,
   themeId,
@@ -148,6 +168,264 @@ async function renameTheme({
     },
   };
 }
+
+async function shopifyAdminGraphql({
+  storeHandle,
+  accessToken,
+  query,
+  variables,
+}) {
+  const url = `https://${ storeHandle }.myshopify.com/admin/api/${ SHOPIFY_API_VERSION }/graphql.json`;
+  let response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Shopify-Access-Token': accessToken,
+      },
+      body: JSON.stringify({
+        query,
+        variables,
+      }),
+    });
+  } catch (error) {
+    return {
+      ok: false,
+      error: {
+        code: 'NETWORK_ERROR',
+        message: 'Could not reach Shopify Admin API.',
+        details: String(error?.message || error),
+      },
+    };
+  }
+
+  let payload;
+  try {
+    payload = await response.json();
+  } catch (error) {
+    return {
+      ok: false,
+      error: {
+        code: 'BAD_RESPONSE',
+        message: `Shopify returned non-JSON (${ response.status }).`,
+        details: String(error?.message || error),
+      },
+    };
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    return {
+      ok: false,
+      error: {
+        code: 'AUTH_ERROR',
+        message: 'Token rejected for this store. Enter a token for the current shop.',
+        details: payload,
+      },
+    };
+  }
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      error: {
+        code: 'HTTP_ERROR',
+        message: payload?.errors?.[0]?.message || `Shopify HTTP ${ response.status }`,
+        details: payload,
+      },
+    };
+  }
+
+  if (payload?.errors?.length) {
+    const message = payload.errors.map((error) => error.message).filter(Boolean).join('; ');
+    const authish = /access|denied|unauthorized|forbidden|token/i.test(message);
+    return {
+      ok: false,
+      error: {
+        code: authish ? 'AUTH_ERROR' : 'GRAPHQL_ERROR',
+        message: message || 'GraphQL error',
+        details: payload.errors,
+      },
+    };
+  }
+
+  return {
+    ok: true,
+    data: payload?.data,
+  };
+}
+
+async function accessTokenForStore(storeHandle) {
+  const settings = await loadSettings();
+  return tokenForStore(settings, storeHandle);
+}
+
+async function findProductByHandle(storeHandle, productHandle) {
+  const accessToken = await accessTokenForStore(storeHandle);
+  if (!accessToken) {
+    return {
+      ok: false,
+      error: {
+        code: 'MISSING_TOKEN',
+        message: 'An Admin API token is required to look up products.',
+      },
+    };
+  }
+
+  const handle = String(productHandle || '').trim();
+  if (!storeHandle || !handle) {
+    return {
+      ok: false,
+      error: {
+        code: 'MISSING_ARGS',
+        message: 'Need store handle and product handle.',
+      },
+    };
+  }
+
+  const result = await shopifyAdminGraphql({
+    storeHandle,
+    accessToken,
+    query: PRODUCT_BY_HANDLE_QUERY,
+    variables: {
+      identifier: {
+        handle,
+      },
+    },
+  });
+
+  if (!result.ok) {
+    return result;
+  }
+
+  const product = result.data?.product || null;
+  if (!product?.id) {
+    return {
+      ok: false,
+      error: {
+        code: 'PRODUCT_NOT_FOUND',
+        message: `No product with handle "${ handle }" on ${ storeHandle }.`,
+      },
+    };
+  }
+
+  return {
+    ok: true,
+    data: {
+      product,
+    },
+  };
+}
+
+async function findProductHandleById(storeHandle, productId) {
+  const accessToken = await accessTokenForStore(storeHandle);
+  if (!accessToken) {
+    return {
+      ok: false,
+      error: {
+        code: 'MISSING_TOKEN',
+        message: 'An Admin API token is required to look up products.',
+      },
+    };
+  }
+
+  const id = gidToId(productId);
+  if (!storeHandle || !id) {
+    return {
+      ok: false,
+      error: {
+        code: 'MISSING_ARGS',
+        message: 'Need store handle and product id.',
+      },
+    };
+  }
+
+  const result = await shopifyAdminGraphql({
+    storeHandle,
+    accessToken,
+    query: PRODUCT_BY_ID_QUERY,
+    variables: {
+      id: `gid://shopify/Product/${ id }`,
+    },
+  });
+
+  if (!result.ok) {
+    return result;
+  }
+
+  const handle = String(result.data?.product?.handle || '').trim();
+  if (!handle) {
+    return {
+      ok: false,
+      error: {
+        code: 'PRODUCT_NOT_FOUND',
+        message: 'Could not resolve a handle for this product.',
+      },
+    };
+  }
+
+  return {
+    ok: true,
+    data: {
+      handle,
+    },
+  };
+}
+
+async function switchProductByHandle({
+  url,
+  targetStoreHandle,
+  currentStoreHandle,
+  productHandle,
+}) {
+  let handle = String(productHandle || '').trim();
+
+  // Prefer handle from the admin UI; fall back to looking it up on this store.
+  if (!handle && currentStoreHandle) {
+    const productId = String(url || '').match(/\/products\/(\d+)/)?.[1];
+    if (productId) {
+      const current = await findProductHandleById(currentStoreHandle, productId);
+      if (current.ok) {
+        handle = current.data.handle;
+      } else if (current.error?.code !== 'MISSING_TOKEN') {
+        return current;
+      }
+    }
+  }
+
+  if (!handle) {
+    return {
+      ok: false,
+      error: {
+        code: 'MISSING_PRODUCT_HANDLE',
+        message: 'Could not read the product handle from this page.',
+      },
+    };
+  }
+
+  const lookup = await findProductByHandle(targetStoreHandle, handle);
+  if (!lookup.ok) {
+    return lookup;
+  }
+
+  const productId = gidToId(lookup.data.product.id);
+  if (!productId) {
+    return {
+      ok: false,
+      error: {
+        code: 'BAD_PRODUCT',
+        message: 'Shopify returned a product without an id.',
+      },
+    };
+  }
+
+  return {
+    ok: true,
+    url: `https://admin.shopify.com/store/${ targetStoreHandle }/products/${ productId }`,
+  };
+}
+
+registerStoreSwitchHandler(PRODUCT_ADMIN_PATH, switchProductByHandle);
 
 async function openExtensionPopup({
   focusToken = false,
@@ -330,6 +608,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         targetStoreHandle,
         currentStoreHandle: message.payload?.currentStoreHandle
           || storeHandleFromUrl(tab.url),
+        productHandle: message.payload?.productHandle || '',
       });
 
       if (!resolved?.ok) {
