@@ -93,9 +93,30 @@ const DISCOUNTS_BY_TITLE_QUERY = `
   }
 `.trim();
 
+const THEME_BY_ID_QUERY = `
+  query themeById($id: ID!) {
+    theme(id: $id) {
+      id
+      name
+    }
+  }
+`.trim();
+
+const THEMES_BY_NAME_QUERY = `
+  query themesByName($names: [String!]) {
+    themes(first: 10, names: $names) {
+      nodes {
+        id
+        name
+      }
+    }
+  }
+`.trim();
+
 const PRODUCT_ADMIN_PATH = /admin\.shopify\.com\/store\/[^/?#]+\/products\/\d+/;
 const CUSTOMER_ADMIN_PATH = /admin\.shopify\.com\/store\/[^/?#]+\/customers\/\d+/;
 const DISCOUNT_ADMIN_PATH = /admin\.shopify\.com\/store\/[^/?#]+\/discounts\/\d+/;
+const THEME_EDITOR_ADMIN_PATH = /admin\.shopify\.com\/store\/[^/?#]+\/themes\/\d+/;
 
 async function renameTheme({
   storeHandle,
@@ -835,9 +856,191 @@ async function switchDiscountByName({
   };
 }
 
+async function findThemeNameById(storeHandle, themeId) {
+  const accessToken = await accessTokenForStore(storeHandle);
+  if (!accessToken) {
+    return {
+      ok: false,
+      error: {
+        code: 'MISSING_TOKEN',
+        message: 'An Admin API token is required to look up themes.',
+      },
+    };
+  }
+
+  const id = gidToId(themeId);
+  if (!storeHandle || !id) {
+    return {
+      ok: false,
+      error: {
+        code: 'MISSING_ARGS',
+        message: 'Need store handle and theme id.',
+      },
+    };
+  }
+
+  const result = await shopifyAdminGraphql({
+    storeHandle,
+    accessToken,
+    query: THEME_BY_ID_QUERY,
+    variables: {
+      id: `gid://shopify/OnlineStoreTheme/${ id }`,
+    },
+  });
+
+  if (!result.ok) {
+    return result;
+  }
+
+  const name = String(result.data?.theme?.name || '').trim();
+  if (!name) {
+    return {
+      ok: false,
+      error: {
+        code: 'THEME_NOT_FOUND',
+        message: 'Could not resolve a name for this theme.',
+      },
+    };
+  }
+
+  return {
+    ok: true,
+    data: {
+      name,
+    },
+  };
+}
+
+async function findThemeByName(storeHandle, themeName) {
+  const accessToken = await accessTokenForStore(storeHandle);
+  if (!accessToken) {
+    return {
+      ok: false,
+      error: {
+        code: 'MISSING_TOKEN',
+        message: 'An Admin API token is required to look up themes.',
+      },
+    };
+  }
+
+  const name = String(themeName || '').trim();
+  if (!storeHandle || !name) {
+    return {
+      ok: false,
+      error: {
+        code: 'MISSING_ARGS',
+        message: 'Need store handle and theme name.',
+      },
+    };
+  }
+
+  const result = await shopifyAdminGraphql({
+    storeHandle,
+    accessToken,
+    query: THEMES_BY_NAME_QUERY,
+    variables: {
+      names: [name],
+    },
+  });
+
+  if (!result.ok) {
+    return result;
+  }
+
+  const nodes = result.data?.themes?.nodes || [];
+  const match = nodes.find((theme) => (
+    String(theme?.name || '').trim().toLowerCase() === name.toLowerCase()
+  )) || nodes[0] || null;
+
+  if (!match?.id) {
+    return {
+      ok: false,
+      error: {
+        code: 'THEME_NOT_FOUND',
+        message: `No theme named "${ name }" on ${ storeHandle }.`,
+      },
+    };
+  }
+
+  return {
+    ok: true,
+    data: {
+      theme: match,
+    },
+  };
+}
+
+function themeEditorUrl(storeHandle, themeId, sourceUrl) {
+  const store = String(storeHandle || '').trim();
+  const id = gidToId(themeId);
+  if (!store || !id) {
+    return null;
+  }
+
+  const source = String(sourceUrl || '');
+  const suffixMatch = source.match(/\/themes\/\d+(\/[^?#]*)?/);
+  const suffix = suffixMatch?.[1] || '/editor';
+  const tail = source.match(/([?#].*)$/)?.[1] || '';
+
+  return `https://admin.shopify.com/store/${ store }/themes/${ id }${ suffix }${ tail }`;
+}
+
+async function switchThemeByName({
+  url,
+  targetStoreHandle,
+  currentStoreHandle,
+  themeName,
+}) {
+  let name = String(themeName || '').trim();
+
+  if (!name && currentStoreHandle) {
+    const themeId = String(url || '').match(/\/themes\/(\d+)/)?.[1];
+    if (themeId) {
+      const current = await findThemeNameById(currentStoreHandle, themeId);
+      if (current.ok) {
+        name = current.data.name;
+      } else if (current.error?.code !== 'MISSING_TOKEN') {
+        return current;
+      }
+    }
+  }
+
+  if (!name) {
+    return {
+      ok: false,
+      error: {
+        code: 'MISSING_THEME_NAME',
+        message: 'Could not read the theme name from this page.',
+      },
+    };
+  }
+
+  const lookup = await findThemeByName(targetStoreHandle, name);
+  if (!lookup.ok) {
+    return lookup;
+  }
+
+  const nextUrl = themeEditorUrl(targetStoreHandle, lookup.data.theme.id, url);
+  if (!nextUrl) {
+    return {
+      ok: false,
+      error: {
+        code: 'BAD_THEME',
+        message: 'Shopify returned a theme without an id.',
+      },
+    };
+  }
+
+  return {
+    ok: true,
+    url: nextUrl,
+  };
+}
+
 registerStoreSwitchHandler(PRODUCT_ADMIN_PATH, switchProductByHandle);
 registerStoreSwitchHandler(CUSTOMER_ADMIN_PATH, switchCustomerByEmail);
 registerStoreSwitchHandler(DISCOUNT_ADMIN_PATH, switchDiscountByName);
+registerStoreSwitchHandler(THEME_EDITOR_ADMIN_PATH, switchThemeByName);
 
 async function openExtensionPopup({
   focusToken = false,
@@ -1023,6 +1226,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         productHandle: message.payload?.productHandle || '',
         customerEmail: message.payload?.customerEmail || '',
         discountName: message.payload?.discountName || '',
+        themeName: message.payload?.themeName || '',
       });
 
       if (!resolved?.ok) {

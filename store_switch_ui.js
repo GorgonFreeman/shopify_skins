@@ -7,6 +7,7 @@
   const PRODUCT_ADMIN_PATH = /admin\.shopify\.com\/store\/[^/?#]+\/products\/\d+/;
   const CUSTOMER_ADMIN_PATH = /admin\.shopify\.com\/store\/[^/?#]+\/customers\/\d+/;
   const DISCOUNT_ADMIN_PATH = /admin\.shopify\.com\/store\/[^/?#]+\/discounts\/\d+/;
+  const THEME_EDITOR_ADMIN_PATH = /admin\.shopify\.com\/store\/[^/?#]+\/themes\/\d+/;
   const DRAG_THRESHOLD_PX = 5;
   const DEFAULT_OFFSET = {
     top: 12,
@@ -193,6 +194,27 @@
     return null;
   }
 
+  function extractThemeNameFromUi() {
+    const skip = /^(customize|theme editor|online store|themes?|editor|preview|save|discard)$/i;
+
+    for (const heading of queryAllDeep('h1, h2, [class*="Polaris-Text--heading"], [class*="Polaris-Header"]')) {
+      const text = cleanText(heading);
+      if (!text || text.length > 120 || skip.test(text)) {
+        continue;
+      }
+      return text;
+    }
+
+    const docTitle = String(document.title || '')
+      .split(/[·|—–-]/)[0]
+      .trim();
+    if (docTitle && !skip.test(docTitle) && !/shopify/i.test(docTitle)) {
+      return docTitle;
+    }
+
+    return null;
+  }
+
   function switchContextPayload(targetStoreHandle) {
     const payload = {
       targetStoreHandle,
@@ -217,6 +239,13 @@
       const discountName = extractDiscountNameFromUi();
       if (discountName) {
         payload.discountName = discountName;
+      }
+    }
+
+    if (THEME_EDITOR_ADMIN_PATH.test(location.href)) {
+      const themeName = extractThemeNameFromUi();
+      if (themeName) {
+        payload.themeName = themeName;
       }
     }
 
