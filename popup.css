@@ -3,6 +3,7 @@
   --ink: #1a1a1a;
   --muted: #5c5c5c;
   --line: #d8d8d8;
+  --surface: #ffffff;
   --accent: #008060;
   --preview-primary: #B9A3FF;
   --preview-secondary: #FFFFFF;
@@ -26,7 +27,7 @@ body {
 .popup {
   padding: 16px;
   display: grid;
-  gap: 12px;
+  gap: 16px;
 }
 
 .header {
@@ -39,6 +40,141 @@ h1 {
   font-size: 18px;
   font-weight: 650;
   letter-spacing: -0.02em;
+}
+
+.featureSection {
+  display: grid;
+  gap: 10px;
+}
+
+.featureSection h2 {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.featureRow {
+  display: grid;
+  gap: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.featureHeader {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  padding: 0 4px 0 12px;
+}
+
+.featureToggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.featureToggle input {
+  margin: 0;
+}
+
+.featureExpand {
+  appearance: none;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.featureExpand:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--ink);
+}
+
+.featureExpand:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.featureExpand .chevron {
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform 120ms ease;
+  margin-top: -3px;
+}
+
+.featureExpand[aria-expanded="true"] .chevron {
+  transform: rotate(225deg);
+  margin-top: 3px;
+}
+
+.featureSettings {
+  display: grid;
+  gap: 10px;
+  padding: 0 12px 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.featureSettings[hidden] {
+  display: none;
+}
+
+.featureSettings.is-empty {
+  display: none !important;
+}
+
+.featureRow:has(.featureSettings.is-empty) .featureExpand {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.featureRow.is-colour-scheme-off .featureSettings {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.featureRow.is-api-gated {
+  opacity: 0.45;
+}
+
+.featureRow.is-api-gated .featureToggle {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.featureRow.is-api-gated .featureToggle input {
+  cursor: not-allowed;
+}
+
+.featureRow.is-api-gated.is-enabled {
+  opacity: 1;
+}
+
+.featureRow.is-api-gated.is-enabled .featureToggle {
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.featureRow.is-api-gated.is-enabled .featureToggle input {
+  cursor: pointer;
 }
 
 .swatches {
@@ -75,14 +211,6 @@ h1 {
 .colours {
   display: grid;
   gap: 8px;
-}
-
-.popup.is-colour-scheme-off .colours,
-.popup.is-colour-scheme-off .swatches,
-.popup.is-colour-scheme-off label.checkbox[for="useGradient"],
-.popup.is-colour-scheme-off label.field[for="themeInput"] {
-  opacity: 0.45;
-  pointer-events: none;
 }
 
 .colourRow {
@@ -131,56 +259,18 @@ h1 {
   font-weight: 500;
 }
 
-.divider {
-  border: 0;
-  border-top: 1px solid var(--line);
-  margin: 4px 0;
-}
-
-.apiSection {
-  display: grid;
-  gap: 10px;
-}
-
-.apiSection h2 {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 650;
-}
-
-.checkbox.is-api-gated {
-  opacity: 0.45;
-  color: var(--muted);
-  cursor: not-allowed;
-}
-
-.checkbox.is-api-gated input {
-  cursor: not-allowed;
-}
-
-.checkbox.is-api-gated.is-enabled {
-  opacity: 1;
-  color: var(--ink);
-  cursor: pointer;
-}
-
-.checkbox.is-api-gated.is-enabled input {
-  cursor: pointer;
-}
-
 .actions {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 8px;
 }
 
-button {
+button.secondary,
+button.ghost {
   appearance: none;
   border: 0;
   border-radius: 8px;
   padding: 10px 12px;
-  background: var(--accent);
-  color: white;
   font: inherit;
   font-weight: 650;
   cursor: pointer;
@@ -188,6 +278,7 @@ button {
 
 button.secondary {
   background: #1a1a1a;
+  color: white;
 }
 
 button.ghost {
@@ -196,11 +287,10 @@ button.ghost {
   border: 1px solid var(--line);
 }
 
-button:hover {
+button.secondary:hover {
   filter: brightness(0.95);
 }
 
 button.ghost:hover {
-  filter: none;
   background: rgba(0, 0, 0, 0.04);
 }

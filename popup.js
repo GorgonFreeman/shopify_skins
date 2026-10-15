@@ -18,15 +18,19 @@ const colourFields = {
 };
 
 const colourSchemeEnabled = document.getElementById('colourSchemeEnabled');
+const colourSchemeRow = document.getElementById('colourSchemeRow');
+const colourSchemeExpand = document.getElementById('colourSchemeExpand');
+const colourSchemeSettings = document.getElementById('colourSchemeSettings');
 const useGradient = document.getElementById('useGradient');
 const themeInput = document.getElementById('themeInput');
 const accessToken = document.getElementById('accessToken');
 const themeRenameEnabled = document.getElementById('themeRenameEnabled');
 const themeRenameRow = document.getElementById('themeRenameRow');
+const themeRenameExpand = document.getElementById('themeRenameExpand');
+const themeRenameSettings = document.getElementById('themeRenameSettings');
 const exportButton = document.getElementById('exportButton');
 const resetButton = document.getElementById('resetButton');
 const swatches = document.getElementById('swatches');
-const popup = document.querySelector('.popup');
 
 const popupParams = new URLSearchParams(location.search);
 let activeStoreHandle = popupParams.get('store') || '';
@@ -51,6 +55,19 @@ function normaliseHex(value) {
   return null;
 }
 
+function setFeatureExpanded(expandButton, settingsEl, expanded) {
+  if (!expandButton || !settingsEl || settingsEl.classList.contains('is-empty')) {
+    return;
+  }
+  expandButton.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+  settingsEl.hidden = !expanded;
+}
+
+function toggleFeatureExpanded(expandButton, settingsEl) {
+  const isOpen = expandButton.getAttribute('aria-expanded') === 'true';
+  setFeatureExpanded(expandButton, settingsEl, !isOpen);
+}
+
 function readThemeFromForm() {
   return {
     primary: colourFields.primary.colour.value.toUpperCase(),
@@ -63,7 +80,7 @@ function readThemeFromForm() {
 }
 
 function syncColourSchemeUi(enabled) {
-  popup.classList.toggle('is-colour-scheme-off', !enabled);
+  colourSchemeRow.classList.toggle('is-colour-scheme-off', !enabled);
 }
 
 function paintPreview(theme) {
@@ -236,6 +253,12 @@ for (const key of Object.keys(colourFields)) {
 }
 
 colourSchemeEnabled.addEventListener('change', applyFromForm);
+colourSchemeExpand.addEventListener('click', () => {
+  toggleFeatureExpanded(colourSchemeExpand, colourSchemeSettings);
+});
+themeRenameExpand.addEventListener('click', () => {
+  toggleFeatureExpanded(themeRenameExpand, themeRenameSettings);
+});
 useGradient.addEventListener('change', applyFromForm);
 themeInput.addEventListener('change', applyFromSlackPaste);
 themeInput.addEventListener('keydown', (event) => {
@@ -274,4 +297,3 @@ async function hydrate() {
 }
 
 hydrate();
-

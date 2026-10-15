@@ -12,87 +12,116 @@
         <h1>Shopify Skins</h1>
       </header>
 
-      <label class="checkbox" for="colourSchemeEnabled">
-        <input id="colourSchemeEnabled" type="checkbox" checked />
-        Colour scheme
-      </label>
+      <section class="featureSection">
+        <h2>No API key needed</h2>
 
-      <div class="swatches" id="swatches" aria-hidden="true"></div>
+        <article class="featureRow" id="colourSchemeRow">
+          <div class="featureHeader">
+            <label class="featureToggle" for="colourSchemeEnabled">
+              <input id="colourSchemeEnabled" type="checkbox" checked />
+              <span>Colour scheme</span>
+            </label>
+            <button
+              id="colourSchemeExpand"
+              class="featureExpand"
+              type="button"
+              aria-expanded="false"
+              aria-controls="colourSchemeSettings"
+              title="Colour scheme settings"
+            >
+              <span class="chevron" aria-hidden="true"></span>
+            </button>
+          </div>
 
-      <div class="colours" id="colourControls">
-        <label class="colourRow" for="primaryHex">
-          <span class="colourLabel">Primary</span>
-          <input id="primaryColour" type="color" value="#B9A3FF" />
-          <input
-            id="primaryHex"
-            class="hex"
-            type="text"
-            spellcheck="false"
-            autocomplete="off"
-            maxlength="7"
-          />
-        </label>
+          <div
+            id="colourSchemeSettings"
+            class="featureSettings"
+            hidden
+          >
+            <div class="swatches" id="swatches" aria-hidden="true"></div>
 
-        <label class="colourRow" for="secondaryHex">
-          <span class="colourLabel">Secondary</span>
-          <input id="secondaryColour" type="color" value="#FFFFFF" />
-          <input
-            id="secondaryHex"
-            class="hex"
-            type="text"
-            spellcheck="false"
-            autocomplete="off"
-            maxlength="7"
-          />
-        </label>
+            <div class="colours" id="colourControls">
+              <label class="colourRow" for="primaryHex">
+                <span class="colourLabel">Primary</span>
+                <input id="primaryColour" type="color" value="#B9A3FF" />
+                <input
+                  id="primaryHex"
+                  class="hex"
+                  type="text"
+                  spellcheck="false"
+                  autocomplete="off"
+                  maxlength="7"
+                />
+              </label>
 
-        <label class="colourRow" for="textHex">
-          <span class="colourLabel">Text</span>
-          <input id="textColour" type="color" value="#FF61DF" />
-          <input
-            id="textHex"
-            class="hex"
-            type="text"
-            spellcheck="false"
-            autocomplete="off"
-            maxlength="7"
-          />
-        </label>
+              <label class="colourRow" for="secondaryHex">
+                <span class="colourLabel">Secondary</span>
+                <input id="secondaryColour" type="color" value="#FFFFFF" />
+                <input
+                  id="secondaryHex"
+                  class="hex"
+                  type="text"
+                  spellcheck="false"
+                  autocomplete="off"
+                  maxlength="7"
+                />
+              </label>
 
-        <label class="colourRow" for="accentHex">
-          <span class="colourLabel">Accent</span>
-          <input id="accentColour" type="color" value="#94FFB2" />
-          <input
-            id="accentHex"
-            class="hex"
-            type="text"
-            spellcheck="false"
-            autocomplete="off"
-            maxlength="7"
-          />
-        </label>
-      </div>
+              <label class="colourRow" for="textHex">
+                <span class="colourLabel">Text</span>
+                <input id="textColour" type="color" value="#FF61DF" />
+                <input
+                  id="textHex"
+                  class="hex"
+                  type="text"
+                  spellcheck="false"
+                  autocomplete="off"
+                  maxlength="7"
+                />
+              </label>
 
-      <label class="checkbox" for="useGradient">
-        <input id="useGradient" type="checkbox" />
-        Use gradient
-      </label>
+              <label class="colourRow" for="accentHex">
+                <span class="colourLabel">Accent</span>
+                <input id="accentColour" type="color" value="#94FFB2" />
+                <input
+                  id="accentHex"
+                  class="hex"
+                  type="text"
+                  spellcheck="false"
+                  autocomplete="off"
+                  maxlength="7"
+                />
+              </label>
+            </div>
 
-      <label class="field" for="themeInput">
-        Slack paste
-        <input
-          id="themeInput"
-          type="text"
-          spellcheck="false"
-          autocomplete="off"
-          placeholder="#B9A3FF,#FFFFFF,#FF61DF,#94FFB2"
-        />
-      </label>
+            <label class="checkbox" for="useGradient">
+              <input id="useGradient" type="checkbox" />
+              Use gradient
+            </label>
 
-      <hr class="divider" />
+            <label class="field" for="themeInput">
+              Slack paste
+              <input
+                id="themeInput"
+                type="text"
+                spellcheck="false"
+                autocomplete="off"
+                placeholder="#B9A3FF,#FFFFFF,#FF61DF,#94FFB2"
+              />
+            </label>
 
-      <section class="apiSection">
-        <h2>API functionalities</h2>
+            <div class="actions">
+              <button id="exportButton" type="button" class="secondary">
+                Export CSV
+              </button>
+              <button id="resetButton" type="button" class="ghost">Reset</button>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section class="featureSection">
+        <h2>Requires API key</h2>
 
         <label class="field" for="accessToken">
           API key
@@ -105,22 +134,31 @@
           />
         </label>
 
-        <label
-          class="checkbox is-api-gated"
-          for="themeRenameEnabled"
-          id="themeRenameRow"
-        >
-          <input id="themeRenameEnabled" type="checkbox" disabled />
-          Renaming themes
-        </label>
-      </section>
+        <article class="featureRow is-api-gated" id="themeRenameRow">
+          <div class="featureHeader">
+            <label class="featureToggle" for="themeRenameEnabled">
+              <input id="themeRenameEnabled" type="checkbox" disabled />
+              <span>Renaming themes</span>
+            </label>
+            <button
+              id="themeRenameExpand"
+              class="featureExpand"
+              type="button"
+              aria-expanded="false"
+              aria-controls="themeRenameSettings"
+              title="Renaming themes settings"
+            >
+              <span class="chevron" aria-hidden="true"></span>
+            </button>
+          </div>
 
-      <div class="actions">
-        <button id="exportButton" type="button" class="secondary">
-          Export CSV
-        </button>
-        <button id="resetButton" type="button" class="ghost">Reset</button>
-      </div>
+          <div
+            id="themeRenameSettings"
+            class="featureSettings is-empty"
+            hidden
+          ></div>
+        </article>
+      </section>
     </main>
 
     <script src="theme_storage.js"></script>
