@@ -183,11 +183,42 @@
             hidden
           ></div>
         </article>
+
+        <article class="featureRow is-api-gated" id="storeSwitchRow">
+          <div class="featureHeader">
+            <label class="featureToggle" for="storeSwitchEnabled">
+              <input id="storeSwitchEnabled" type="checkbox" disabled />
+              <span>Switch stores</span>
+            </label>
+            <button
+              id="storeSwitchExpand"
+              class="featureExpand"
+              type="button"
+              aria-expanded="false"
+              aria-controls="storeSwitchSettings"
+              title="Switch stores settings"
+            >
+              <span class="chevron" aria-hidden="true"></span>
+            </button>
+          </div>
+
+          <div
+            id="storeSwitchSettings"
+            class="featureSettings"
+            hidden
+          >
+            <p class="featureHint" id="storeSwitchHint">
+              Open the same admin page on another store you've entered an API key for.
+            </p>
+            <div id="storeSwitchTargets" class="storeSwitchTargets"></div>
+          </div>
+        </article>
       </section>
     </main>
 
     <script src="theme_storage.js"></script>
     <script src="settings.js"></script>
+    <script src="store_switch.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>

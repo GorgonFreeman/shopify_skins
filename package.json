@@ -13,7 +13,7 @@
   },
   "homepage": "https://github.com/GorgonFreeman/shopify_skins#readme",
   "scripts": {
-    "test": "node test_apply.mjs && node test_rename.mjs && node test_rename_api.mjs",
+    "test": "node test_apply.mjs && node test_rename.mjs && node test_rename_api.mjs && node test_store_switch.mjs",
     "pack": "rm -f dist/shopify_skins.zip && mkdir -p dist && zip -r dist/shopify_skins.zip . -x '*.git*' -x 'node_modules/*' -x 'dist/*' -x 'test_*.mjs' -x 'package-lock.json' -x '.DS_Store' -x 'store_listing.md' -x 'install.sh' -x 'package.json' -x 'README.md'"
   }
 }

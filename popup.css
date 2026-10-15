@@ -252,6 +252,42 @@ h1 {
   font-weight: 600;
 }
 
+.featureHint {
+  margin: 0;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.storeSwitchTargets {
+  display: grid;
+  gap: 6px;
+}
+
+.storeSwitchTarget {
+  appearance: none;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: white;
+  color: var(--ink);
+  font: inherit;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.storeSwitchTarget:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.storeSwitchTarget:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .checkbox {
   display: flex;
   align-items: center;

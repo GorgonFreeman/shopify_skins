@@ -6,6 +6,7 @@ const DEFAULT_SETTINGS = {
   accessTokensByStore: {},
   themePreviewEnabled: false,
   themeRenameEnabled: false,
+  storeSwitchEnabled: false,
 };
 
 async function loadSettings() {
@@ -59,6 +60,24 @@ function tokenForStore(settings, storeHandle) {
     return String(map._default).trim();
   }
   return String(settings.accessToken || '').trim();
+}
+
+function hasKeyedTokenForStore(settings, storeHandle) {
+  const map = settings.accessTokensByStore || {};
+  const handle = String(storeHandle || '').trim();
+  return Boolean(handle && String(map[handle] || '').trim());
+}
+
+function keyedStoreHandles(settings, {
+  excludeHandle = '',
+} = {}) {
+  const map = settings?.accessTokensByStore || {};
+  const exclude = String(excludeHandle || '').trim();
+  return Object.keys(map)
+    .filter((key) => key && key !== '_default')
+    .filter((key) => Boolean(String(map[key] || '').trim()))
+    .filter((key) => key !== exclude)
+    .sort((a, b) => a.localeCompare(b));
 }
 
 async function saveTokenForStore(storeHandle, accessToken) {

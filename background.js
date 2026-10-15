@@ -1,4 +1,4 @@
-importScripts('utils.js', 'settings.js');
+importScripts('utils.js', 'settings.js', 'store_switch.js');
 
 const SHOPIFY_API_VERSION = '2025-10';
 
@@ -274,6 +274,87 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         ok: false,
         error: {
           code: 'POPUP_FAILED',
+          message: String(error?.message || error),
+        },
+      }));
+    return true;
+  }
+
+  if (message?.type === 'shopifySkinsSwitchStore') {
+    (async () => {
+      const settings = await loadSettings();
+      if (!settings.storeSwitchEnabled) {
+        return {
+          ok: false,
+          error: {
+            code: 'DISABLED',
+            message: 'Turn on Switch stores in Shopify Skins.',
+          },
+        };
+      }
+
+      const targetStoreHandle = String(
+        message.payload?.targetStoreHandle || '',
+      ).trim();
+      if (!hasKeyedTokenForStore(settings, targetStoreHandle)) {
+        return {
+          ok: false,
+          error: {
+            code: 'MISSING_TARGET_TOKEN',
+            message: 'Enter an API key for that store first.',
+          },
+        };
+      }
+
+      let tab = sender?.tab || null;
+      if (!tab?.id) {
+        const tabs = await chrome.tabs.query({
+          active: true,
+          currentWindow: true,
+        });
+        tab = tabs?.[0] || null;
+      }
+
+      if (!tab?.id || !tab.url) {
+        return {
+          ok: false,
+          error: {
+            code: 'NO_TAB',
+            message: 'No active Shopify admin tab to switch.',
+          },
+        };
+      }
+
+      const resolved = await resolveStoreSwitch({
+        url: tab.url,
+        targetStoreHandle,
+        currentStoreHandle: message.payload?.currentStoreHandle
+          || storeHandleFromUrl(tab.url),
+      });
+
+      if (!resolved?.ok) {
+        return resolved;
+      }
+
+      if (resolved.url && resolved.url !== tab.url) {
+        await chrome.tabs.update(tab.id, {
+          url: resolved.url,
+        });
+      }
+
+      return {
+        ok: true,
+        data: {
+          url: resolved.url,
+          targetStoreHandle,
+        },
+      };
+    })()
+      .then((result) => sendResponse(result))
+      .catch((error) => sendResponse({
+        ok: false,
+        error: {
+          code: 'UNEXPECTED',
           message: String(error?.message || error),
         },
       }));
