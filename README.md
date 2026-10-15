@@ -5,13 +5,33 @@ Chrome extension that applies custom Slack-style colour themes to the Shopify ad
 **Public repo:** https://github.com/GorgonFreeman/shopify_skins  
 **Releases:** https://github.com/GorgonFreeman/shopify_skins/releases
 
-## Install from release
+## Install as a custom extension
+
+Chrome does not install arbitrary `.zip` / `.crx` sideloads the way it used to. Load the extension unpacked instead:
+
+### From this repo
+
+1. Clone or download the repo and keep the folder somewhere permanent
+2. Open `chrome://extensions`
+3. Enable **Developer mode** (top right)
+4. Click **Load unpacked**
+5. Select this project folder (the one that contains `manifest.json`)
+
+Or from the repo root:
+
+```bash
+./install.sh
+```
+
+That opens the folder and `chrome://extensions` so you can **Load unpacked**.
+
+### From a GitHub release
 
 1. Download `shopify_skins.zip` from the [latest release](https://github.com/GorgonFreeman/shopify_skins/releases/latest)
 2. Unzip it somewhere permanent
-3. Open `chrome://extensions`
-4. Enable **Developer mode**
-5. **Load unpacked** → select the unzipped folder
+3. Open `chrome://extensions` → enable **Developer mode** → **Load unpacked** → select the unzipped folder
+
+After code changes: click **Reload** on the extension card, then hard-refresh Shopify admin tabs.
 
 ## Theme colours
 
@@ -54,20 +74,17 @@ Note: Shopify may require a `write_themes` exemption for `themeUpdate` on some a
 
 Toggle **Colour scheme** in the popup to apply/unapply live. From an admin console you can also run `shopifySkinsApply()` / `shopifySkinsUnapply()`.
 
-## Load unpacked (development)
+## Chrome Web Store zip
 
-1. Open `chrome://extensions`
-2. Enable **Developer mode**
-3. **Load unpacked** → select this folder (or run `./install.sh`)
-4. Reload the extension after code changes, then hard-refresh admin tabs
-
-## Pack
+Build the zip Google’s developer console expects (`manifest.json` at the zip root, no git/dev junk):
 
 ```bash
 npm run pack
 ```
 
-Creates `dist/shopify_skins.zip` for Chrome Web Store upload or GitHub releases.
+Output: `dist/shopify_skins.zip` — upload that file in the Chrome Web Store listing (or attach it to a GitHub release).
+
+`npm run pack:chrome` is the same command.
 
 ## Privacy
 
