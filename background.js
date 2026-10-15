@@ -493,7 +493,7 @@ function resourceSearchUrl(storeHandle, resource, query) {
   if (!store || !path || !q) {
     return null;
   }
-  return `https://admin.shopify.com/store/${ store }/${ path }?q=${ encodeURIComponent(q) }`;
+  return `https://admin.shopify.com/store/${ store }/${ path }?query=${ encodeURIComponent(q) }`;
 }
 
 function discountTitle(discountNode) {
