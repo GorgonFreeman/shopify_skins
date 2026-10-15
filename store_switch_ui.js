@@ -5,6 +5,7 @@
 
   const HOST_ID = 'shopify-skins-store-switch';
   const PRODUCT_ADMIN_PATH = /admin\.shopify\.com\/store\/[^/?#]+\/products\/\d+/;
+  const COLLECTION_ADMIN_PATH = /admin\.shopify\.com\/store\/[^/?#]+\/collections\/\d+/;
   const CUSTOMER_ADMIN_PATH = /admin\.shopify\.com\/store\/[^/?#]+\/customers\/\d+/;
   const DISCOUNT_ADMIN_PATH = /admin\.shopify\.com\/store\/[^/?#]+\/discounts\/\d+/;
   const THEME_EDITOR_ADMIN_PATH = /admin\.shopify\.com\/store\/[^/?#]+\/themes\/\d+/;
@@ -34,13 +35,15 @@
     return parseAdminContext(location.href).storeHandle || '';
   }
 
-  function isLikelyProductHandle(value) {
+  function isLikelyResourceHandle(value) {
     const handle = String(value || '').trim();
     if (!handle || /^\d+$/.test(handle)) {
       return false;
     }
     return /^[a-z0-9]+(?:-[a-z0-9]+)*$/i.test(handle);
   }
+
+  const isLikelyProductHandle = isLikelyResourceHandle;
 
   function fieldIdentity(el) {
     return [
@@ -52,14 +55,23 @@
     ].filter(Boolean).join(' ').toLowerCase();
   }
 
-  function extractHandleFromProductsPath(value) {
-    const matches = String(value || '').matchAll(/\/products\/([a-z0-9][a-z0-9-]*)/gi);
+  function extractHandleFromResourcePath(value, resource) {
+    const pattern = new RegExp(`\\/${ resource }\\/([a-z0-9][a-z0-9-]*)`, 'gi');
+    const matches = String(value || '').matchAll(pattern);
     for (const match of matches) {
-      if (isLikelyProductHandle(match[1])) {
+      if (isLikelyResourceHandle(match[1])) {
         return match[1];
       }
     }
     return null;
+  }
+
+  function extractHandleFromProductsPath(value) {
+    return extractHandleFromResourcePath(value, 'products');
+  }
+
+  function extractHandleFromCollectionsPath(value) {
+    return extractHandleFromResourcePath(value, 'collections');
   }
 
   function labelledFieldValue(labelMatcher) {
@@ -116,6 +128,47 @@
         el.textContent,
       ].filter(Boolean).join(' ');
       const fromPath = extractHandleFromProductsPath(haystack);
+      if (fromPath) {
+        return fromPath;
+      }
+    }
+
+    return null;
+  }
+
+  function extractCollectionHandleFromUi() {
+    const fields = queryAllDeep('input, textarea');
+    for (const field of fields) {
+      const identity = fieldIdentity(field);
+      if (!/handle/.test(identity) || /metafield|namespace|product/.test(identity)) {
+        continue;
+      }
+      const value = String(field.value || '').trim();
+      if (isLikelyResourceHandle(value)) {
+        return value;
+      }
+      const fromPath = extractHandleFromCollectionsPath(value);
+      if (fromPath) {
+        return fromPath;
+      }
+    }
+
+    const labelled = labelledFieldValue((text) => (
+      text === 'handle'
+      || text === 'url handle'
+      || text.startsWith('url handle')
+    ));
+    if (isLikelyResourceHandle(labelled)) {
+      return labelled;
+    }
+
+    for (const el of queryAllDeep('a, span, p, div, input, textarea')) {
+      const haystack = [
+        el.getAttribute?.('href'),
+        el.value,
+        el.textContent,
+      ].filter(Boolean).join(' ');
+      const fromPath = extractHandleFromCollectionsPath(haystack);
       if (fromPath) {
         return fromPath;
       }
@@ -225,6 +278,13 @@
       const productHandle = extractProductHandleFromUi();
       if (productHandle) {
         payload.productHandle = productHandle;
+      }
+    }
+
+    if (COLLECTION_ADMIN_PATH.test(location.href)) {
+      const collectionHandle = extractCollectionHandleFromUi();
+      if (collectionHandle) {
+        payload.collectionHandle = collectionHandle;
       }
     }
 

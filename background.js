@@ -35,6 +35,24 @@ const PRODUCT_BY_ID_QUERY = `
   }
 `.trim();
 
+const COLLECTION_BY_HANDLE_QUERY = `
+  query collectionByHandle($identifier: CollectionIdentifierInput!) {
+    collection: collectionByIdentifier(identifier: $identifier) {
+      id
+      handle
+    }
+  }
+`.trim();
+
+const COLLECTION_BY_ID_QUERY = `
+  query collectionById($id: ID!) {
+    collection(id: $id) {
+      id
+      handle
+    }
+  }
+`.trim();
+
 const CUSTOMER_BY_EMAIL_QUERY = `
   query customerByEmail($identifier: CustomerIdentifierInput!) {
     customer: customerByIdentifier(identifier: $identifier) {
@@ -114,6 +132,7 @@ const THEMES_BY_NAME_QUERY = `
 `.trim();
 
 const PRODUCT_ADMIN_PATH = /admin\.shopify\.com\/store\/[^/?#]+\/products\/\d+/;
+const COLLECTION_ADMIN_PATH = /admin\.shopify\.com\/store\/[^/?#]+\/collections\/\d+/;
 const CUSTOMER_ADMIN_PATH = /admin\.shopify\.com\/store\/[^/?#]+\/customers\/\d+/;
 const DISCOUNT_ADMIN_PATH = /admin\.shopify\.com\/store\/[^/?#]+\/discounts\/\d+/;
 const THEME_EDITOR_ADMIN_PATH = /admin\.shopify\.com\/store\/[^/?#]+\/themes\/\d+/;
@@ -514,6 +533,170 @@ async function switchProductByHandle({
       error: {
         code: 'BAD_PRODUCT',
         message: 'Shopify returned a product without an id.',
+      },
+    };
+  }
+
+  return {
+    ok: true,
+    url: nextUrl,
+  };
+}
+
+async function findCollectionByHandle(storeHandle, collectionHandle) {
+  const accessToken = await accessTokenForStore(storeHandle);
+  if (!accessToken) {
+    return {
+      ok: false,
+      error: {
+        code: 'MISSING_TOKEN',
+        message: 'An Admin API token is required to look up collections.',
+      },
+    };
+  }
+
+  const handle = String(collectionHandle || '').trim();
+  if (!storeHandle || !handle) {
+    return {
+      ok: false,
+      error: {
+        code: 'MISSING_ARGS',
+        message: 'Need store handle and collection handle.',
+      },
+    };
+  }
+
+  const result = await shopifyAdminGraphql({
+    storeHandle,
+    accessToken,
+    query: COLLECTION_BY_HANDLE_QUERY,
+    variables: {
+      identifier: {
+        handle,
+      },
+    },
+  });
+
+  if (!result.ok) {
+    return result;
+  }
+
+  const collection = result.data?.collection || null;
+  if (!collection?.id) {
+    return {
+      ok: false,
+      error: {
+        code: 'COLLECTION_NOT_FOUND',
+        message: `No collection with handle "${ handle }" on ${ storeHandle }.`,
+      },
+    };
+  }
+
+  return {
+    ok: true,
+    data: {
+      collection,
+    },
+  };
+}
+
+async function findCollectionHandleById(storeHandle, collectionId) {
+  const accessToken = await accessTokenForStore(storeHandle);
+  if (!accessToken) {
+    return {
+      ok: false,
+      error: {
+        code: 'MISSING_TOKEN',
+        message: 'An Admin API token is required to look up collections.',
+      },
+    };
+  }
+
+  const id = gidToId(collectionId);
+  if (!storeHandle || !id) {
+    return {
+      ok: false,
+      error: {
+        code: 'MISSING_ARGS',
+        message: 'Need store handle and collection id.',
+      },
+    };
+  }
+
+  const result = await shopifyAdminGraphql({
+    storeHandle,
+    accessToken,
+    query: COLLECTION_BY_ID_QUERY,
+    variables: {
+      id: `gid://shopify/Collection/${ id }`,
+    },
+  });
+
+  if (!result.ok) {
+    return result;
+  }
+
+  const handle = String(result.data?.collection?.handle || '').trim();
+  if (!handle) {
+    return {
+      ok: false,
+      error: {
+        code: 'COLLECTION_NOT_FOUND',
+        message: 'Could not resolve a handle for this collection.',
+      },
+    };
+  }
+
+  return {
+    ok: true,
+    data: {
+      handle,
+    },
+  };
+}
+
+async function switchCollectionByHandle({
+  url,
+  targetStoreHandle,
+  currentStoreHandle,
+  collectionHandle,
+}) {
+  let handle = String(collectionHandle || '').trim();
+
+  if (!handle && currentStoreHandle) {
+    const collectionId = String(url || '').match(/\/collections\/(\d+)/)?.[1];
+    if (collectionId) {
+      const current = await findCollectionHandleById(currentStoreHandle, collectionId);
+      if (current.ok) {
+        handle = current.data.handle;
+      } else if (current.error?.code !== 'MISSING_TOKEN') {
+        return current;
+      }
+    }
+  }
+
+  if (!handle) {
+    return {
+      ok: false,
+      error: {
+        code: 'MISSING_COLLECTION_HANDLE',
+        message: 'Could not read the collection handle from this page.',
+      },
+    };
+  }
+
+  const lookup = await findCollectionByHandle(targetStoreHandle, handle);
+  if (!lookup.ok) {
+    return lookup;
+  }
+
+  const nextUrl = adminResourceUrl(targetStoreHandle, 'collections', lookup.data.collection.id);
+  if (!nextUrl) {
+    return {
+      ok: false,
+      error: {
+        code: 'BAD_COLLECTION',
+        message: 'Shopify returned a collection without an id.',
       },
     };
   }
@@ -1038,6 +1221,7 @@ async function switchThemeByName({
 }
 
 registerStoreSwitchHandler(PRODUCT_ADMIN_PATH, switchProductByHandle);
+registerStoreSwitchHandler(COLLECTION_ADMIN_PATH, switchCollectionByHandle);
 registerStoreSwitchHandler(CUSTOMER_ADMIN_PATH, switchCustomerByEmail);
 registerStoreSwitchHandler(DISCOUNT_ADMIN_PATH, switchDiscountByName);
 registerStoreSwitchHandler(THEME_EDITOR_ADMIN_PATH, switchThemeByName);
@@ -1224,6 +1408,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         currentStoreHandle: message.payload?.currentStoreHandle
           || storeHandleFromUrl(tab.url),
         productHandle: message.payload?.productHandle || '',
+        collectionHandle: message.payload?.collectionHandle || '',
         customerEmail: message.payload?.customerEmail || '',
         discountName: message.payload?.discountName || '',
         themeName: message.payload?.themeName || '',
