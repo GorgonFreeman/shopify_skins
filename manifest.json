@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Shopify Skins",
-  "description": "Apply custom Slack-style colour themes to the Shopify admin, with optional theme rename.",
-  "version": "0.3.4",
+  "description": "Slack-style colour themes for Shopify admin, plus optional theme preview and rename.",
+  "version": "0.3.5",
   "icons": {
     "16": "icons/icon_16.png",
     "48": "icons/icon_48.png",
