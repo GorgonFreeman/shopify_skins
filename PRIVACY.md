@@ -1,33 +1,14 @@
 # Privacy Policy — Shopify Skins
 
-**Publisher contact:** johntheshopifydeveloper@gmail.com  
-**Last updated:** 14 October 2026
+**Contact:** johntheshopifydeveloper@gmail.com  
+**Last updated:** 15 October 2026
 
-Shopify Skins is a Chrome extension that customises the look of the Shopify admin and optionally renames themes via the Shopify Admin API.
+Shopify Skins does not view, sell, or collect your data. There is no analytics, no account system, and no server of ours that receives your information.
 
-## Data we store
+Anything you enter (colour theme, optional API key, feature toggles) is stored only in your browser via Chrome storage.
 
-- **Colour theme settings** (palette colours, gradient flag, colour-scheme on/off) are stored in `chrome.storage.sync` so they can sync with your Chrome profile.
-- **Optional Shopify Admin API access tokens** are stored in `chrome.storage.local`, keyed by store when possible. Tokens never leave your browser except as described below.
+The only network use is on your action:
+- **Rename themes** — your API key is sent only to your own shop’s Shopify Admin API (`{store}.myshopify.com`) to perform the rename you requested.
+- **Preview themes** — opens your storefront preview URL in a new tab. No API key is sent.
 
-## Data we transmit
-
-- If you enable theme renaming and enter an API key, rename requests are sent only to your shop’s Shopify Admin GraphQL endpoint (`https://{store}.myshopify.com/admin/api/...`) with that key.
-- We do not operate a backend for this extension. We do not sell, rent, or use your data for advertising.
-
-## Data we do not collect
-
-- No analytics SDKs
-- No third-party trackers
-- No account system of our own
-
-## Permissions
-
-- `storage` — save theme and optional API key settings
-- `tabs` — detect the active admin store when saving a token / opening the popup
-- Host access to `*.myshopify.com` — call the Admin API for theme rename only when you use that feature
-- Content scripts on `admin.shopify.com` and `online-store-web.shopifyapps.com` — apply colours and show rename UI
-
-## Contact
-
-Questions about this policy: **johntheshopifydeveloper@gmail.com**
+We cannot access your Chrome storage or Shopify token.
