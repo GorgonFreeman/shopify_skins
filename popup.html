@@ -118,6 +118,31 @@
             </div>
           </div>
         </article>
+
+        <article class="featureRow" id="themePreviewRow">
+          <div class="featureHeader">
+            <label class="featureToggle" for="themePreviewEnabled">
+              <input id="themePreviewEnabled" type="checkbox" />
+              <span>Preview themes</span>
+            </label>
+            <button
+              id="themePreviewExpand"
+              class="featureExpand"
+              type="button"
+              aria-expanded="false"
+              aria-controls="themePreviewSettings"
+              title="Preview themes settings"
+            >
+              <span class="chevron" aria-hidden="true"></span>
+            </button>
+          </div>
+
+          <div
+            id="themePreviewSettings"
+            class="featureSettings is-empty"
+            hidden
+          ></div>
+        </article>
       </section>
 
       <section class="featureSection">

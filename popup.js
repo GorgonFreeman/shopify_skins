@@ -24,6 +24,9 @@ const colourSchemeSettings = document.getElementById('colourSchemeSettings');
 const useGradient = document.getElementById('useGradient');
 const themeInput = document.getElementById('themeInput');
 const accessToken = document.getElementById('accessToken');
+const themePreviewEnabled = document.getElementById('themePreviewEnabled');
+const themePreviewExpand = document.getElementById('themePreviewExpand');
+const themePreviewSettings = document.getElementById('themePreviewSettings');
 const themeRenameEnabled = document.getElementById('themeRenameEnabled');
 const themeRenameRow = document.getElementById('themeRenameRow');
 const themeRenameExpand = document.getElementById('themeRenameExpand');
@@ -215,6 +218,7 @@ function scheduleSaveSettings() {
 
     await saveSettings({
       ...settings,
+      themePreviewEnabled: themePreviewEnabled.checked,
       themeRenameEnabled: renameOn,
     });
   }, 120);
@@ -256,6 +260,9 @@ colourSchemeEnabled.addEventListener('change', applyFromForm);
 colourSchemeExpand.addEventListener('click', () => {
   toggleFeatureExpanded(colourSchemeExpand, colourSchemeSettings);
 });
+themePreviewExpand.addEventListener('click', () => {
+  toggleFeatureExpanded(themePreviewExpand, themePreviewSettings);
+});
 themeRenameExpand.addEventListener('click', () => {
   toggleFeatureExpanded(themeRenameExpand, themeRenameSettings);
 });
@@ -276,6 +283,7 @@ accessToken.addEventListener('input', () => {
   syncApiGatedUi();
   scheduleSaveSettings();
 });
+themePreviewEnabled.addEventListener('change', scheduleSaveSettings);
 themeRenameEnabled.addEventListener('change', scheduleSaveSettings);
 
 async function hydrate() {
@@ -287,6 +295,7 @@ async function hydrate() {
   writeThemeToForm(theme);
   accessToken.value = tokenForStore(settings, storeHandle) || '';
   const hasKey = Boolean(accessToken.value.trim());
+  themePreviewEnabled.checked = settings.themePreviewEnabled === true;
   themeRenameEnabled.checked = hasKey && settings.themeRenameEnabled === true;
   syncApiGatedUi();
 

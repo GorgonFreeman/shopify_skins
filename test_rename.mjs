@@ -131,12 +131,13 @@ await page.evaluate((source) => {
     },
   };
 
-  // Seed: API key + rename enabled (as popup would save).
+  // Seed: API key + rename + preview enabled (as popup would save).
   localStore.shopifySkinsSettings = {
     accessToken: '',
     accessTokensByStore: {
       'demo-shop': 'shpat_test_token',
     },
+    themePreviewEnabled: true,
     themeRenameEnabled: true,
   };
 
@@ -151,10 +152,13 @@ await page.waitForTimeout(250);
 
 const withRenameOn = await page.evaluate(() => {
   const pencils = [...document.querySelectorAll('[data-shopify-skins-rename-btn]')];
+  const previews = [...document.querySelectorAll('[data-shopify-skins-preview-btn]')];
   return {
     href: location.href,
     pencilCount: pencils.length,
+    previewCount: previews.length,
     themeIds: pencils.map((el) => el.dataset.themeId),
+    previewThemeIds: previews.map((el) => el.dataset.themeId),
     labels: [...document.querySelectorAll('h2')].map((el) => el.textContent.trim()),
   };
 });
@@ -200,7 +204,7 @@ const renameFlow = await page.evaluate(async () => {
 });
 console.log('renameFlow', JSON.stringify(renameFlow, null, 2));
 
-// Toggle rename off via storage change
+// Toggle rename off via storage change — preview stays
 const afterDisable = await page.evaluate(async () => {
   await chrome.storage.local.set({
     shopifySkinsSettings: {
@@ -208,31 +212,55 @@ const afterDisable = await page.evaluate(async () => {
       accessTokensByStore: {
         'demo-shop': 'shpat_test_token',
       },
+      themePreviewEnabled: true,
       themeRenameEnabled: false,
     },
   });
   await new Promise((r) => setTimeout(r, 200));
   return {
     pencilCount: document.querySelectorAll('[data-shopify-skins-rename-btn]').length,
+    previewCount: document.querySelectorAll('[data-shopify-skins-preview-btn]').length,
   };
 });
 console.log('afterDisable', afterDisable);
 
-// No token → no pencils even if flag true
+// No token → no pencils even if flag true; preview still ok
 const afterNoToken = await page.evaluate(async () => {
   await chrome.storage.local.set({
     shopifySkinsSettings: {
       accessToken: '',
       accessTokensByStore: {},
+      themePreviewEnabled: true,
       themeRenameEnabled: true,
     },
   });
   await new Promise((r) => setTimeout(r, 200));
   return {
     pencilCount: document.querySelectorAll('[data-shopify-skins-rename-btn]').length,
+    previewCount: document.querySelectorAll('[data-shopify-skins-preview-btn]').length,
   };
 });
 console.log('afterNoToken', afterNoToken);
+
+// Preview off → no eyes
+const afterPreviewOff = await page.evaluate(async () => {
+  await chrome.storage.local.set({
+    shopifySkinsSettings: {
+      accessToken: '',
+      accessTokensByStore: {
+        'demo-shop': 'shpat_test_token',
+      },
+      themePreviewEnabled: false,
+      themeRenameEnabled: true,
+    },
+  });
+  await new Promise((r) => setTimeout(r, 200));
+  return {
+    pencilCount: document.querySelectorAll('[data-shopify-skins-rename-btn]').length,
+    previewCount: document.querySelectorAll('[data-shopify-skins-preview-btn]').length,
+  };
+});
+console.log('afterPreviewOff', afterPreviewOff);
 
 console.log('pageErrors', errors);
 
@@ -240,12 +268,18 @@ await browser.close();
 
 const renameMsg = renameFlow.messages?.find((m) => m.type === 'shopifySkinsRenameTheme');
 const ok = withRenameOn.pencilCount === 2
+  && withRenameOn.previewCount === 2
   && withRenameOn.themeIds.includes('123456789')
+  && withRenameOn.previewThemeIds.includes('123456789')
   && renameMsg?.payload?.name === 'Dawn Renamed'
   && renameMsg?.payload?.storeHandle === 'demo-shop'
   && renameMsg?.payload?.themeId === '123456789'
   && afterDisable.pencilCount === 0
+  && afterDisable.previewCount === 2
   && afterNoToken.pencilCount === 0
+  && afterNoToken.previewCount === 2
+  && afterPreviewOff.pencilCount === 2
+  && afterPreviewOff.previewCount === 0
   && errors.length === 0;
 
 if (!ok) {
