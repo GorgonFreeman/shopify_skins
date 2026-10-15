@@ -13,7 +13,9 @@ const bundled = [
   read('theme_storage.js'),
   read('colour_scheme.js'),
   read('settings.js'),
+  read('utils.js'),
   read('content.js'),
+  read('preview.js'),
   read('rename.js'),
 ].join('\n;\n');
 

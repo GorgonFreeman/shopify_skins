@@ -1,4 +1,4 @@
-importScripts('settings.js');
+importScripts('utils.js', 'settings.js');
 
 const SHOPIFY_API_VERSION = '2025-10';
 
@@ -61,7 +61,7 @@ async function renameTheme({
       body: JSON.stringify({
         query: THEME_UPDATE_MUTATION,
         variables: {
-          id: `gid://shopify/OnlineStoreTheme/${ themeId }`,
+          id: `gid://shopify/OnlineStoreTheme/${ gidToId(themeId) }`,
           input: {
             name,
           },

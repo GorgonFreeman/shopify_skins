@@ -1,6 +1,6 @@
 # Shopify Skins
 
-Chrome extension that applies custom Slack-style colour themes to the Shopify admin, plus optional theme rename via the Admin API.
+Chrome extension that applies custom Slack-style colour themes to the Shopify admin, plus optional theme preview and Admin API rename.
 
 **Public repo:** https://github.com/GorgonFreeman/shopify_skins  
 **Releases:** https://github.com/GorgonFreeman/shopify_skins/releases
@@ -23,14 +23,21 @@ Paste a Slack theme string in the popup:
 
 Mapped as **primary**, **secondary**, **text**, **accent**. Colour pickers update the admin live. Use **Colour scheme** to turn styling off without losing your palette. Export CSV from the popup when you want a snapshot.
 
+## Preview themes
+
+1. In the popup under **No API key needed**, turn on **Preview themes**.
+2. Open **Online Store → Themes**.
+3. Click the eye next to a theme name — opens
+   `https://{store}.myshopify.com/?preview_theme_id={id}` in a new tab.
+
 ## Theme rename
 
-1. In the extension popup under **API functionalities**, paste a Shopify Admin API key (`shpat_…`) with theme write access.
+1. In the popup under **Requires API key**, paste a Shopify Admin API key (`shpat_…`) with theme write access.
 2. Turn on **Renaming themes** (greyed out until a key is entered).
 3. Open **Online Store → Themes**. The themes UI loads in Shopify’s
    `online-store-web` iframe — pencils appear on theme titles there.
 4. Click the pencil → rename in the popover → Save / Enter.
-   The pencil uses your accent colour, or teal when the colour scheme is off.
+   Preview eye and rename pencil use your accent colour, or teal when the colour scheme is off.
 
 Rename calls Shopify GraphQL `themeUpdate` directly (`STORE_HANDLE` from the admin URL + your key). The key is stored in `chrome.storage.local` only.
 
@@ -41,7 +48,9 @@ Note: Shopify may require a `write_themes` exemption for `themeUpdate` on some a
 - `theme_storage.js` — palette model + chrome.storage load/save
 - `colour_scheme.js` — `ColourScheme.apply()` / `ColourScheme.unapply()` / `ColourScheme.sync()`
 - `content.js` — listens for storage + DOM remounts and calls `sync()`
-- `rename.js` — theme title pencils + rename popover (also on `online-store-web.shopifyapps.com`)
+- `utils.js` — `gidToId`, shared DOM helpers, `ThemeActions` plugin host
+- `preview.js` — theme preview eye buttons
+- `rename.js` — rename pencils + popover (also on `online-store-web.shopifyapps.com`)
 
 Toggle **Colour scheme** in the popup to apply/unapply live. From an admin console you can also run `shopifySkinsApply()` / `shopifySkinsUnapply()`.
 

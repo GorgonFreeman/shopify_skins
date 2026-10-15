@@ -36,7 +36,9 @@
         "theme_storage.js",
         "colour_scheme.js",
         "settings.js",
+        "utils.js",
         "content.js",
+        "preview.js",
         "rename.js"
       ],
       "run_at": "document_start",
@@ -49,6 +51,8 @@
       "js": [
         "theme_storage.js",
         "settings.js",
+        "utils.js",
+        "preview.js",
         "rename.js"
       ],
       "run_at": "document_start",

@@ -8,11 +8,15 @@ import vm from 'vm';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+const utilsSrc = fs.readFileSync(path.join(__dirname, 'utils.js'), 'utf8');
 const settingsSrc = fs.readFileSync(path.join(__dirname, 'settings.js'), 'utf8');
 const backgroundSrc = fs.readFileSync(path.join(__dirname, 'background.js'), 'utf8');
 
-// background.js uses importScripts — strip that and load settings first in the sandbox.
-const backgroundBody = backgroundSrc.replace(/^importScripts\('settings\.js'\);\s*/m, '');
+// background.js uses importScripts — strip that and load utils + settings first in the sandbox.
+const backgroundBody = backgroundSrc.replace(
+  /^importScripts\('utils\.js', 'settings\.js'\);\s*/m,
+  '',
+);
 
 const fetchCalls = [];
 let fetchImpl = async () => {
@@ -80,6 +84,7 @@ const sandbox = {
 };
 
 vm.createContext(sandbox);
+vm.runInContext(utilsSrc, sandbox);
 vm.runInContext(settingsSrc, sandbox);
 vm.runInContext(backgroundBody, sandbox);
 
