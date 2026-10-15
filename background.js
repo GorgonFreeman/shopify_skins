@@ -31,6 +31,7 @@ const PRODUCT_BY_ID_QUERY = `
     product(id: $id) {
       id
       handle
+      title
     }
   }
 `.trim();
@@ -49,6 +50,7 @@ const COLLECTION_BY_ID_QUERY = `
     collection(id: $id) {
       id
       handle
+      title
     }
   }
 `.trim();
@@ -67,6 +69,9 @@ const CUSTOMER_BY_ID_QUERY = `
     customer(id: $id) {
       id
       email
+      firstName
+      lastName
+      displayName
     }
   }
 `.trim();
@@ -448,13 +453,15 @@ async function findProductHandleById(storeHandle, productId) {
     return result;
   }
 
-  const handle = String(result.data?.product?.handle || '').trim();
-  if (!handle) {
+  const product = result.data?.product || null;
+  const handle = String(product?.handle || '').trim();
+  const title = String(product?.title || '').trim();
+  if (!handle && !title) {
     return {
       ok: false,
       error: {
         code: 'PRODUCT_NOT_FOUND',
-        message: 'Could not resolve a handle for this product.',
+        message: 'Could not resolve this product.',
       },
     };
   }
@@ -463,6 +470,8 @@ async function findProductHandleById(storeHandle, productId) {
     ok: true,
     data: {
       handle,
+      title,
+      search: title || handle,
     },
   };
 }
@@ -475,6 +484,16 @@ function adminResourceUrl(storeHandle, resource, id) {
     return null;
   }
   return `https://admin.shopify.com/store/${ store }/${ path }/${ resourceId }`;
+}
+
+function resourceSearchUrl(storeHandle, resource, query) {
+  const store = String(storeHandle || '').trim();
+  const path = String(resource || '').trim().replace(/^\/+|\/+$/g, '');
+  const q = String(query || '').trim();
+  if (!store || !path || !q) {
+    return null;
+  }
+  return `https://admin.shopify.com/store/${ store }/${ path }?q=${ encodeURIComponent(q) }`;
 }
 
 function discountTitle(discountNode) {
@@ -505,25 +524,50 @@ async function switchProductByHandle({
     return current;
   }
 
-  const lookup = await findProductByHandle(targetStoreHandle, current.data.handle);
-  if (!lookup.ok) {
-    return lookup;
+  const {
+    handle,
+    search,
+  } = current.data;
+
+  if (handle) {
+    const lookup = await findProductByHandle(targetStoreHandle, handle);
+    if (lookup.ok) {
+      const nextUrl = adminResourceUrl(targetStoreHandle, 'products', lookup.data.product.id);
+      if (!nextUrl) {
+        return {
+          ok: false,
+          error: {
+            code: 'BAD_PRODUCT',
+            message: 'Shopify returned a product without an id.',
+          },
+        };
+      }
+      return {
+        ok: true,
+        url: nextUrl,
+      };
+    }
+    if (lookup.error?.code !== 'PRODUCT_NOT_FOUND') {
+      return lookup;
+    }
   }
 
-  const nextUrl = adminResourceUrl(targetStoreHandle, 'products', lookup.data.product.id);
-  if (!nextUrl) {
+  const searchUrl = resourceSearchUrl(targetStoreHandle, 'products', search);
+  if (!searchUrl) {
     return {
       ok: false,
       error: {
-        code: 'BAD_PRODUCT',
-        message: 'Shopify returned a product without an id.',
+        code: 'PRODUCT_NOT_FOUND',
+        message: handle
+          ? `No product with handle "${ handle }" on ${ targetStoreHandle }.`
+          : 'Could not resolve a title to search for this product.',
       },
     };
   }
 
   return {
     ok: true,
-    url: nextUrl,
+    url: searchUrl,
   };
 }
 
@@ -620,13 +664,15 @@ async function findCollectionHandleById(storeHandle, collectionId) {
     return result;
   }
 
-  const handle = String(result.data?.collection?.handle || '').trim();
-  if (!handle) {
+  const collection = result.data?.collection || null;
+  const handle = String(collection?.handle || '').trim();
+  const title = String(collection?.title || '').trim();
+  if (!handle && !title) {
     return {
       ok: false,
       error: {
         code: 'COLLECTION_NOT_FOUND',
-        message: 'Could not resolve a handle for this collection.',
+        message: 'Could not resolve this collection.',
       },
     };
   }
@@ -635,6 +681,8 @@ async function findCollectionHandleById(storeHandle, collectionId) {
     ok: true,
     data: {
       handle,
+      title,
+      search: title || handle,
     },
   };
 }
@@ -659,29 +707,70 @@ async function switchCollectionByHandle({
     return current;
   }
 
-  const lookup = await findCollectionByHandle(targetStoreHandle, current.data.handle);
-  if (!lookup.ok) {
-    return lookup;
+  const {
+    handle,
+    search,
+  } = current.data;
+
+  if (handle) {
+    const lookup = await findCollectionByHandle(targetStoreHandle, handle);
+    if (lookup.ok) {
+      const nextUrl = adminResourceUrl(
+        targetStoreHandle,
+        'collections',
+        lookup.data.collection.id,
+      );
+      if (!nextUrl) {
+        return {
+          ok: false,
+          error: {
+            code: 'BAD_COLLECTION',
+            message: 'Shopify returned a collection without an id.',
+          },
+        };
+      }
+      return {
+        ok: true,
+        url: nextUrl,
+      };
+    }
+    if (lookup.error?.code !== 'COLLECTION_NOT_FOUND') {
+      return lookup;
+    }
   }
 
-  const nextUrl = adminResourceUrl(targetStoreHandle, 'collections', lookup.data.collection.id);
-  if (!nextUrl) {
+  const searchUrl = resourceSearchUrl(targetStoreHandle, 'collections', search);
+  if (!searchUrl) {
     return {
       ok: false,
       error: {
-        code: 'BAD_COLLECTION',
-        message: 'Shopify returned a collection without an id.',
+        code: 'COLLECTION_NOT_FOUND',
+        message: handle
+          ? `No collection with handle "${ handle }" on ${ targetStoreHandle }.`
+          : 'Could not resolve a title to search for this collection.',
       },
     };
   }
 
   return {
     ok: true,
-    url: nextUrl,
+    url: searchUrl,
   };
 }
 
-async function findCustomerEmailById(storeHandle, customerId) {
+function customerSearchName(customer) {
+  const displayName = String(customer?.displayName || '').trim();
+  if (displayName) {
+    return displayName;
+  }
+  return [customer?.firstName, customer?.lastName]
+    .map((part) => String(part || '').trim())
+    .filter(Boolean)
+    .join(' ');
+}
+
+
+async function findCustomerById(storeHandle, customerId) {
   const accessToken = await accessTokenForStore(storeHandle);
   if (!accessToken) {
     return {
@@ -717,13 +806,13 @@ async function findCustomerEmailById(storeHandle, customerId) {
     return result;
   }
 
-  const email = String(result.data?.customer?.email || '').trim();
-  if (!email) {
+  const customer = result.data?.customer || null;
+  if (!customer?.id) {
     return {
       ok: false,
       error: {
         code: 'CUSTOMER_NOT_FOUND',
-        message: 'Could not resolve an email for this customer.',
+        message: 'Could not resolve this customer.',
       },
     };
   }
@@ -731,7 +820,9 @@ async function findCustomerEmailById(storeHandle, customerId) {
   return {
     ok: true,
     data: {
-      email,
+      customer,
+      email: String(customer.email || '').trim(),
+      name: customerSearchName(customer),
     },
   };
 }
@@ -808,30 +899,59 @@ async function switchCustomerByEmail({
     };
   }
 
-  const current = await findCustomerEmailById(currentStoreHandle, id);
+  const current = await findCustomerById(currentStoreHandle, id);
   if (!current.ok) {
     return current;
   }
 
-  const lookup = await findCustomerByEmail(targetStoreHandle, current.data.email);
-  if (!lookup.ok) {
-    return lookup;
+  const {
+    email,
+    name,
+  } = current.data;
+
+  if (email) {
+    const lookup = await findCustomerByEmail(targetStoreHandle, email);
+    if (lookup.ok) {
+      const nextUrl = adminResourceUrl(
+        targetStoreHandle,
+        'customers',
+        lookup.data.customer.id,
+      );
+      if (!nextUrl) {
+        return {
+          ok: false,
+          error: {
+            code: 'BAD_CUSTOMER',
+            message: 'Shopify returned a customer without an id.',
+          },
+        };
+      }
+      return {
+        ok: true,
+        url: nextUrl,
+      };
+    }
+    if (lookup.error?.code !== 'CUSTOMER_NOT_FOUND') {
+      return lookup;
+    }
   }
 
-  const nextUrl = adminResourceUrl(targetStoreHandle, 'customers', lookup.data.customer.id);
-  if (!nextUrl) {
+  const searchUrl = resourceSearchUrl(targetStoreHandle, 'customers', name);
+  if (!searchUrl) {
     return {
       ok: false,
       error: {
-        code: 'BAD_CUSTOMER',
-        message: 'Shopify returned a customer without an id.',
+        code: 'CUSTOMER_NOT_FOUND',
+        message: email
+          ? `No customer with email "${ email }" on ${ targetStoreHandle }.`
+          : 'Could not resolve a name to search for this customer.',
       },
     };
   }
 
   return {
     ok: true,
-    url: nextUrl,
+    url: searchUrl,
   };
 }
 
@@ -971,25 +1091,42 @@ async function switchDiscountByName({
     return current;
   }
 
-  const lookup = await findDiscountByTitle(targetStoreHandle, current.data.title);
-  if (!lookup.ok) {
+  const title = current.data.title;
+  const lookup = await findDiscountByTitle(targetStoreHandle, title);
+  if (lookup.ok) {
+    const nextUrl = adminResourceUrl(targetStoreHandle, 'discounts', lookup.data.discount.id);
+    if (!nextUrl) {
+      return {
+        ok: false,
+        error: {
+          code: 'BAD_DISCOUNT',
+          message: 'Shopify returned a discount without an id.',
+        },
+      };
+    }
+    return {
+      ok: true,
+      url: nextUrl,
+    };
+  }
+  if (lookup.error?.code !== 'DISCOUNT_NOT_FOUND') {
     return lookup;
   }
 
-  const nextUrl = adminResourceUrl(targetStoreHandle, 'discounts', lookup.data.discount.id);
-  if (!nextUrl) {
+  const searchUrl = resourceSearchUrl(targetStoreHandle, 'discounts', title);
+  if (!searchUrl) {
     return {
       ok: false,
       error: {
-        code: 'BAD_DISCOUNT',
-        message: 'Shopify returned a discount without an id.',
+        code: 'DISCOUNT_NOT_FOUND',
+        message: `No discount named "${ title }" on ${ targetStoreHandle }.`,
       },
     };
   }
 
   return {
     ok: true,
-    url: nextUrl,
+    url: searchUrl,
   };
 }
 
