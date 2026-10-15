@@ -35,7 +35,67 @@ const PRODUCT_BY_ID_QUERY = `
   }
 `.trim();
 
+const CUSTOMER_BY_EMAIL_QUERY = `
+  query customerByEmail($identifier: CustomerIdentifierInput!) {
+    customer: customerByIdentifier(identifier: $identifier) {
+      id
+      email
+    }
+  }
+`.trim();
+
+const CUSTOMER_BY_ID_QUERY = `
+  query customerById($id: ID!) {
+    customer(id: $id) {
+      id
+      email
+    }
+  }
+`.trim();
+
+const DISCOUNT_TITLE_FRAGMENTS = `
+  ... on DiscountCodeBasic { title }
+  ... on DiscountCodeBxgy { title }
+  ... on DiscountCodeFreeShipping { title }
+  ... on DiscountAutomaticBasic { title }
+  ... on DiscountAutomaticBxgy { title }
+  ... on DiscountAutomaticFreeShipping { title }
+  ... on DiscountAutomaticApp { title }
+`.trim();
+
+const DISCOUNT_BY_ID_QUERY = `
+  query discountById($codeId: ID!, $automaticId: ID!) {
+    code: discountNode(id: $codeId) {
+      id
+      discount {
+        ${ DISCOUNT_TITLE_FRAGMENTS }
+      }
+    }
+    automatic: discountNode(id: $automaticId) {
+      id
+      discount {
+        ${ DISCOUNT_TITLE_FRAGMENTS }
+      }
+    }
+  }
+`.trim();
+
+const DISCOUNTS_BY_TITLE_QUERY = `
+  query discountsByTitle($query: String!) {
+    discountNodes(first: 25, query: $query) {
+      nodes {
+        id
+        discount {
+          ${ DISCOUNT_TITLE_FRAGMENTS }
+        }
+      }
+    }
+  }
+`.trim();
+
 const PRODUCT_ADMIN_PATH = /admin\.shopify\.com\/store\/[^/?#]+\/products\/\d+/;
+const CUSTOMER_ADMIN_PATH = /admin\.shopify\.com\/store\/[^/?#]+\/customers\/\d+/;
+const DISCOUNT_ADMIN_PATH = /admin\.shopify\.com\/store\/[^/?#]+\/discounts\/\d+/;
 
 async function renameTheme({
   storeHandle,
@@ -372,6 +432,24 @@ async function findProductHandleById(storeHandle, productId) {
   };
 }
 
+function adminResourceUrl(storeHandle, resource, id) {
+  const store = String(storeHandle || '').trim();
+  const path = String(resource || '').trim().replace(/^\/+|\/+$/g, '');
+  const resourceId = gidToId(id);
+  if (!store || !path || !resourceId) {
+    return null;
+  }
+  return `https://admin.shopify.com/store/${ store }/${ path }/${ resourceId }`;
+}
+
+function discountTitle(discountNode) {
+  return String(discountNode?.discount?.title || '').trim();
+}
+
+function escapeSearchValue(value) {
+  return String(value || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
 async function switchProductByHandle({
   url,
   targetStoreHandle,
@@ -408,8 +486,8 @@ async function switchProductByHandle({
     return lookup;
   }
 
-  const productId = gidToId(lookup.data.product.id);
-  if (!productId) {
+  const nextUrl = adminResourceUrl(targetStoreHandle, 'products', lookup.data.product.id);
+  if (!nextUrl) {
     return {
       ok: false,
       error: {
@@ -421,11 +499,345 @@ async function switchProductByHandle({
 
   return {
     ok: true,
-    url: `https://admin.shopify.com/store/${ targetStoreHandle }/products/${ productId }`,
+    url: nextUrl,
+  };
+}
+
+async function findCustomerEmailById(storeHandle, customerId) {
+  const accessToken = await accessTokenForStore(storeHandle);
+  if (!accessToken) {
+    return {
+      ok: false,
+      error: {
+        code: 'MISSING_TOKEN',
+        message: 'An Admin API token is required to look up customers.',
+      },
+    };
+  }
+
+  const id = gidToId(customerId);
+  if (!storeHandle || !id) {
+    return {
+      ok: false,
+      error: {
+        code: 'MISSING_ARGS',
+        message: 'Need store handle and customer id.',
+      },
+    };
+  }
+
+  const result = await shopifyAdminGraphql({
+    storeHandle,
+    accessToken,
+    query: CUSTOMER_BY_ID_QUERY,
+    variables: {
+      id: `gid://shopify/Customer/${ id }`,
+    },
+  });
+
+  if (!result.ok) {
+    return result;
+  }
+
+  const email = String(result.data?.customer?.email || '').trim();
+  if (!email) {
+    return {
+      ok: false,
+      error: {
+        code: 'CUSTOMER_NOT_FOUND',
+        message: 'Could not resolve an email for this customer.',
+      },
+    };
+  }
+
+  return {
+    ok: true,
+    data: {
+      email,
+    },
+  };
+}
+
+async function findCustomerByEmail(storeHandle, emailAddress) {
+  const accessToken = await accessTokenForStore(storeHandle);
+  if (!accessToken) {
+    return {
+      ok: false,
+      error: {
+        code: 'MISSING_TOKEN',
+        message: 'An Admin API token is required to look up customers.',
+      },
+    };
+  }
+
+  const email = String(emailAddress || '').trim();
+  if (!storeHandle || !email) {
+    return {
+      ok: false,
+      error: {
+        code: 'MISSING_ARGS',
+        message: 'Need store handle and customer email.',
+      },
+    };
+  }
+
+  const result = await shopifyAdminGraphql({
+    storeHandle,
+    accessToken,
+    query: CUSTOMER_BY_EMAIL_QUERY,
+    variables: {
+      identifier: {
+        emailAddress: email,
+      },
+    },
+  });
+
+  if (!result.ok) {
+    return result;
+  }
+
+  const customer = result.data?.customer || null;
+  if (!customer?.id) {
+    return {
+      ok: false,
+      error: {
+        code: 'CUSTOMER_NOT_FOUND',
+        message: `No customer with email "${ email }" on ${ storeHandle }.`,
+      },
+    };
+  }
+
+  return {
+    ok: true,
+    data: {
+      customer,
+    },
+  };
+}
+
+async function switchCustomerByEmail({
+  url,
+  targetStoreHandle,
+  currentStoreHandle,
+  customerEmail,
+}) {
+  let email = String(customerEmail || '').trim();
+
+  if (!email && currentStoreHandle) {
+    const customerId = String(url || '').match(/\/customers\/(\d+)/)?.[1];
+    if (customerId) {
+      const current = await findCustomerEmailById(currentStoreHandle, customerId);
+      if (current.ok) {
+        email = current.data.email;
+      } else if (current.error?.code !== 'MISSING_TOKEN') {
+        return current;
+      }
+    }
+  }
+
+  if (!email) {
+    return {
+      ok: false,
+      error: {
+        code: 'MISSING_CUSTOMER_EMAIL',
+        message: 'Could not read the customer email from this page.',
+      },
+    };
+  }
+
+  const lookup = await findCustomerByEmail(targetStoreHandle, email);
+  if (!lookup.ok) {
+    return lookup;
+  }
+
+  const nextUrl = adminResourceUrl(targetStoreHandle, 'customers', lookup.data.customer.id);
+  if (!nextUrl) {
+    return {
+      ok: false,
+      error: {
+        code: 'BAD_CUSTOMER',
+        message: 'Shopify returned a customer without an id.',
+      },
+    };
+  }
+
+  return {
+    ok: true,
+    url: nextUrl,
+  };
+}
+
+async function findDiscountTitleById(storeHandle, discountId) {
+  const accessToken = await accessTokenForStore(storeHandle);
+  if (!accessToken) {
+    return {
+      ok: false,
+      error: {
+        code: 'MISSING_TOKEN',
+        message: 'An Admin API token is required to look up discounts.',
+      },
+    };
+  }
+
+  const id = gidToId(discountId);
+  if (!storeHandle || !id) {
+    return {
+      ok: false,
+      error: {
+        code: 'MISSING_ARGS',
+        message: 'Need store handle and discount id.',
+      },
+    };
+  }
+
+  const result = await shopifyAdminGraphql({
+    storeHandle,
+    accessToken,
+    query: DISCOUNT_BY_ID_QUERY,
+    variables: {
+      codeId: `gid://shopify/DiscountCodeNode/${ id }`,
+      automaticId: `gid://shopify/DiscountAutomaticNode/${ id }`,
+    },
+  });
+
+  if (!result.ok) {
+    return result;
+  }
+
+  const node = result.data?.code || result.data?.automatic || null;
+  const title = discountTitle(node);
+  if (!title) {
+    return {
+      ok: false,
+      error: {
+        code: 'DISCOUNT_NOT_FOUND',
+        message: 'Could not resolve a name for this discount.',
+      },
+    };
+  }
+
+  return {
+    ok: true,
+    data: {
+      title,
+    },
+  };
+}
+
+async function findDiscountByTitle(storeHandle, discountTitleValue) {
+  const accessToken = await accessTokenForStore(storeHandle);
+  if (!accessToken) {
+    return {
+      ok: false,
+      error: {
+        code: 'MISSING_TOKEN',
+        message: 'An Admin API token is required to look up discounts.',
+      },
+    };
+  }
+
+  const title = String(discountTitleValue || '').trim();
+  if (!storeHandle || !title) {
+    return {
+      ok: false,
+      error: {
+        code: 'MISSING_ARGS',
+        message: 'Need store handle and discount name.',
+      },
+    };
+  }
+
+  const result = await shopifyAdminGraphql({
+    storeHandle,
+    accessToken,
+    query: DISCOUNTS_BY_TITLE_QUERY,
+    variables: {
+      query: `title:"${ escapeSearchValue(title) }"`,
+    },
+  });
+
+  if (!result.ok) {
+    return result;
+  }
+
+  const nodes = result.data?.discountNodes?.nodes || [];
+  const match = nodes.find((node) => (
+    discountTitle(node).toLowerCase() === title.toLowerCase()
+  )) || nodes[0] || null;
+
+  if (!match?.id) {
+    return {
+      ok: false,
+      error: {
+        code: 'DISCOUNT_NOT_FOUND',
+        message: `No discount named "${ title }" on ${ storeHandle }.`,
+      },
+    };
+  }
+
+  return {
+    ok: true,
+    data: {
+      discount: match,
+    },
+  };
+}
+
+async function switchDiscountByName({
+  url,
+  targetStoreHandle,
+  currentStoreHandle,
+  discountName,
+}) {
+  let title = String(discountName || '').trim();
+
+  if (!title && currentStoreHandle) {
+    const discountId = String(url || '').match(/\/discounts\/(\d+)/)?.[1];
+    if (discountId) {
+      const current = await findDiscountTitleById(currentStoreHandle, discountId);
+      if (current.ok) {
+        title = current.data.title;
+      } else if (current.error?.code !== 'MISSING_TOKEN') {
+        return current;
+      }
+    }
+  }
+
+  if (!title) {
+    return {
+      ok: false,
+      error: {
+        code: 'MISSING_DISCOUNT_NAME',
+        message: 'Could not read the discount name from this page.',
+      },
+    };
+  }
+
+  const lookup = await findDiscountByTitle(targetStoreHandle, title);
+  if (!lookup.ok) {
+    return lookup;
+  }
+
+  const nextUrl = adminResourceUrl(targetStoreHandle, 'discounts', lookup.data.discount.id);
+  if (!nextUrl) {
+    return {
+      ok: false,
+      error: {
+        code: 'BAD_DISCOUNT',
+        message: 'Shopify returned a discount without an id.',
+      },
+    };
+  }
+
+  return {
+    ok: true,
+    url: nextUrl,
   };
 }
 
 registerStoreSwitchHandler(PRODUCT_ADMIN_PATH, switchProductByHandle);
+registerStoreSwitchHandler(CUSTOMER_ADMIN_PATH, switchCustomerByEmail);
+registerStoreSwitchHandler(DISCOUNT_ADMIN_PATH, switchDiscountByName);
 
 async function openExtensionPopup({
   focusToken = false,
@@ -609,6 +1021,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         currentStoreHandle: message.payload?.currentStoreHandle
           || storeHandleFromUrl(tab.url),
         productHandle: message.payload?.productHandle || '',
+        customerEmail: message.payload?.customerEmail || '',
+        discountName: message.payload?.discountName || '',
       });
 
       if (!resolved?.ok) {

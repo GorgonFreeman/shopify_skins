@@ -1,6 +1,7 @@
 // Store switch: rewrite admin URLs across keyed shops.
 // Custom handlers can register for specific URL patterns; otherwise base
-// behaviour keeps the same path on another store.
+// behaviour keeps the same path on another store, stripping a trailing
+// numeric resource id to the index (orders/123 → /orders, markets/9 → /markets).
 
 const storeSwitchHandlers = [];
 
@@ -27,6 +28,16 @@ function rewriteAdminStoreUrl(url, targetStoreHandle) {
     /admin\.shopify\.com\/store\/[^/?#]+/,
     `admin.shopify.com/store/${ handle }`,
   );
+}
+
+// /store/x/orders/123 → /store/x/orders ; /store/x/markets/9 → /store/x/markets
+function stripTrailingAdminResourceId(url) {
+  const source = String(url || '');
+  const next = source.replace(
+    /^(https:\/\/admin\.shopify\.com\/store\/[^/?#]+\/.+?)\/\d+(?=[/?#]|$)/,
+    '$1',
+  );
+  return next === source ? null : next;
 }
 
 function storeHandleFromAdminUrl(url) {
@@ -79,7 +90,10 @@ async function resolveStoreSwitch({
     }
   }
 
-  const nextUrl = rewriteAdminStoreUrl(sourceUrl, target);
+  // Detail pages ending in a numeric id fall back to that resource's index
+  // (orders → /orders, markets → /markets, etc.) unless a handler matched above.
+  const resourceIndexUrl = stripTrailingAdminResourceId(sourceUrl) || sourceUrl;
+  const nextUrl = rewriteAdminStoreUrl(resourceIndexUrl, target);
   if (!nextUrl) {
     return {
       ok: false,

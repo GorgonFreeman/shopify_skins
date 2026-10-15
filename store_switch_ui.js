@@ -5,6 +5,8 @@
 
   const HOST_ID = 'shopify-skins-store-switch';
   const PRODUCT_ADMIN_PATH = /admin\.shopify\.com\/store\/[^/?#]+\/products\/\d+/;
+  const CUSTOMER_ADMIN_PATH = /admin\.shopify\.com\/store\/[^/?#]+\/customers\/\d+/;
+  const DISCOUNT_ADMIN_PATH = /admin\.shopify\.com\/store\/[^/?#]+\/discounts\/\d+/;
   const DRAG_THRESHOLD_PX = 5;
   const DEFAULT_OFFSET = {
     top: 12,
@@ -59,6 +61,27 @@
     return null;
   }
 
+  function labelledFieldValue(labelMatcher) {
+    for (const label of queryAllDeep('label')) {
+      const text = cleanText(label).toLowerCase();
+      if (!labelMatcher(text)) {
+        continue;
+      }
+      const forId = label.getAttribute('for');
+      const linked = forId
+        ? (document.getElementById(forId) || queryAllDeep(`#${ CSS.escape(forId) }`)[0])
+        : null;
+      const nearby = linked
+        || label.querySelector?.('input, textarea')
+        || label.parentElement?.querySelector?.('input, textarea');
+      const value = String(nearby?.value || '').trim();
+      if (value) {
+        return value;
+      }
+    }
+    return null;
+  }
+
   function extractProductHandleFromUi() {
     const fields = queryAllDeep('input, textarea');
     for (const field of fields) {
@@ -76,22 +99,13 @@
       }
     }
 
-    for (const label of queryAllDeep('label')) {
-      const text = cleanText(label).toLowerCase();
-      if (text !== 'handle' && text !== 'url handle' && !text.startsWith('url handle')) {
-        continue;
-      }
-      const forId = label.getAttribute('for');
-      const linked = forId
-        ? (document.getElementById(forId) || queryAllDeep(`#${ CSS.escape(forId) }`)[0])
-        : null;
-      const nearby = linked
-        || label.querySelector?.('input, textarea')
-        || label.parentElement?.querySelector?.('input, textarea');
-      const value = String(nearby?.value || '').trim();
-      if (isLikelyProductHandle(value)) {
-        return value;
-      }
+    const labelled = labelledFieldValue((text) => (
+      text === 'handle'
+      || text === 'url handle'
+      || text.startsWith('url handle')
+    ));
+    if (isLikelyProductHandle(labelled)) {
+      return labelled;
     }
 
     for (const el of queryAllDeep('a, span, p, div, input, textarea')) {
@@ -109,6 +123,76 @@
     return null;
   }
 
+  function isLikelyEmail(value) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
+  }
+
+  function extractCustomerEmailFromUi() {
+    for (const field of queryAllDeep('input, textarea')) {
+      const identity = fieldIdentity(field);
+      const value = String(field.value || '').trim();
+      if ((field.type === 'email' || /email/.test(identity)) && isLikelyEmail(value)) {
+        return value;
+      }
+    }
+
+    const labelled = labelledFieldValue((text) => text === 'email' || text.startsWith('email'));
+    if (isLikelyEmail(labelled)) {
+      return labelled;
+    }
+
+    for (const el of queryAllDeep('a[href^="mailto:"], a, span, p, div')) {
+      const href = el.getAttribute?.('href') || '';
+      if (href.toLowerCase().startsWith('mailto:')) {
+        const email = decodeURIComponent(href.slice(7).split('?')[0] || '').trim();
+        if (isLikelyEmail(email)) {
+          return email;
+        }
+      }
+      const text = cleanText(el);
+      if (isLikelyEmail(text)) {
+        return text;
+      }
+    }
+
+    return null;
+  }
+
+  function extractDiscountNameFromUi() {
+    const labelled = labelledFieldValue((text) => (
+      text === 'title'
+      || text === 'name'
+      || text === 'discount title'
+      || text === 'discount name'
+    ));
+    if (labelled) {
+      return labelled;
+    }
+
+    for (const field of queryAllDeep('input, textarea')) {
+      const identity = fieldIdentity(field);
+      if (!/(^|[^a-z])(title|name)([^a-z]|$)/.test(identity)) {
+        continue;
+      }
+      if (/customer|product|variant|collection|metafield/.test(identity)) {
+        continue;
+      }
+      const value = String(field.value || '').trim();
+      if (value) {
+        return value;
+      }
+    }
+
+    for (const heading of queryAllDeep('h1, h2')) {
+      const text = cleanText(heading);
+      if (text && !/^discount$/i.test(text)) {
+        return text;
+      }
+    }
+
+    return null;
+  }
+
   function switchContextPayload(targetStoreHandle) {
     const payload = {
       targetStoreHandle,
@@ -119,6 +203,20 @@
       const productHandle = extractProductHandleFromUi();
       if (productHandle) {
         payload.productHandle = productHandle;
+      }
+    }
+
+    if (CUSTOMER_ADMIN_PATH.test(location.href)) {
+      const customerEmail = extractCustomerEmailFromUi();
+      if (customerEmail) {
+        payload.customerEmail = customerEmail;
+      }
+    }
+
+    if (DISCOUNT_ADMIN_PATH.test(location.href)) {
+      const discountName = extractDiscountNameFromUi();
+      if (discountName) {
+        payload.discountName = discountName;
       }
     }
 

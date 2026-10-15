@@ -11,40 +11,80 @@ vm.runInNewContext(source, context);
 
 const {
   rewriteAdminStoreUrl,
+  stripTrailingAdminResourceId,
   resolveStoreSwitch,
   registerStoreSwitchHandler,
   storeHandleFromAdminUrl,
 } = context;
 
-const sampleUrl = 'https://admin.shopify.com/store/alpha-shop/products/123?query=sku';
+const productUrl = 'https://admin.shopify.com/store/alpha-shop/products/123?query=sku';
+const orderUrl = 'https://admin.shopify.com/store/alpha-shop/orders/18939949318204';
+const marketUrl = 'https://admin.shopify.com/store/alpha-shop/markets/27885628';
+const listUrl = 'https://admin.shopify.com/store/alpha-shop/products?query=sku';
 
 assert.equal(
-  storeHandleFromAdminUrl(sampleUrl),
+  storeHandleFromAdminUrl(productUrl),
   'alpha-shop',
 );
 
 assert.equal(
-  rewriteAdminStoreUrl(sampleUrl, 'beta-shop'),
+  rewriteAdminStoreUrl(productUrl, 'beta-shop'),
   'https://admin.shopify.com/store/beta-shop/products/123?query=sku',
 );
 
 assert.equal(rewriteAdminStoreUrl('https://example.com/', 'beta-shop'), null);
 
+assert.equal(
+  stripTrailingAdminResourceId(orderUrl),
+  'https://admin.shopify.com/store/alpha-shop/orders',
+);
+
+assert.equal(
+  stripTrailingAdminResourceId(marketUrl),
+  'https://admin.shopify.com/store/alpha-shop/markets',
+);
+
+assert.equal(stripTrailingAdminResourceId(listUrl), null);
+
 {
   const result = await resolveStoreSwitch({
-    url: sampleUrl,
+    url: orderUrl,
     targetStoreHandle: 'beta-shop',
   });
   assert.equal(result.ok, true);
   assert.equal(
     result.url,
-    'https://admin.shopify.com/store/beta-shop/products/123?query=sku',
+    'https://admin.shopify.com/store/beta-shop/orders',
   );
 }
 
 {
   const result = await resolveStoreSwitch({
-    url: sampleUrl,
+    url: marketUrl,
+    targetStoreHandle: 'beta-shop',
+  });
+  assert.equal(result.ok, true);
+  assert.equal(
+    result.url,
+    'https://admin.shopify.com/store/beta-shop/markets',
+  );
+}
+
+{
+  const result = await resolveStoreSwitch({
+    url: listUrl,
+    targetStoreHandle: 'beta-shop',
+  });
+  assert.equal(result.ok, true);
+  assert.equal(
+    result.url,
+    'https://admin.shopify.com/store/beta-shop/products?query=sku',
+  );
+}
+
+{
+  const result = await resolveStoreSwitch({
+    url: productUrl,
     targetStoreHandle: 'alpha-shop',
   });
   assert.equal(result.ok, false);
@@ -64,7 +104,7 @@ registerStoreSwitchHandler(/\/products\/\d+/, async ({
 
 {
   const result = await resolveStoreSwitch({
-    url: sampleUrl,
+    url: productUrl,
     targetStoreHandle: 'beta-shop',
     productHandle: 'linen-shirt',
   });
