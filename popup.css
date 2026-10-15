@@ -41,11 +41,6 @@ h1 {
   letter-spacing: -0.02em;
 }
 
-.hint {
-  margin: 0;
-  color: var(--muted);
-}
-
 .swatches {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -134,20 +129,6 @@ h1 {
   align-items: center;
   gap: 8px;
   font-weight: 500;
-}
-
-.status {
-  min-height: 1.2em;
-  margin: 0;
-  color: var(--muted);
-}
-
-.status.error {
-  color: #b42318;
-}
-
-.status.ok {
-  color: var(--accent);
 }
 
 .divider {

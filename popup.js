@@ -23,10 +23,8 @@ const themeInput = document.getElementById('themeInput');
 const accessToken = document.getElementById('accessToken');
 const themeRenameEnabled = document.getElementById('themeRenameEnabled');
 const themeRenameRow = document.getElementById('themeRenameRow');
-const tokenStoreHint = document.getElementById('tokenStoreHint');
 const exportButton = document.getElementById('exportButton');
 const resetButton = document.getElementById('resetButton');
-const status = document.getElementById('status');
 const swatches = document.getElementById('swatches');
 const popup = document.querySelector('.popup');
 
@@ -36,11 +34,6 @@ let activeStoreHandle = popupParams.get('store') || '';
 let saveTimer = null;
 let settingsTimer = null;
 let applyingForm = false;
-
-function setStatus(message, kind = '') {
-  status.textContent = message;
-  status.className = `status${ kind ? ` ${ kind }` : '' }`;
-}
 
 function normaliseHex(value) {
   const raw = String(value || '').trim();
@@ -111,14 +104,8 @@ function scheduleSave(theme) {
   saveTimer = setTimeout(async () => {
     try {
       await saveTheme(theme);
-      setStatus(
-        theme.colourSchemeEnabled === false
-          ? 'Colour scheme off.'
-          : 'Live on admin.',
-        'ok',
-      );
-    } catch (error) {
-      setStatus(error.message || 'Could not save theme.', 'error');
+    } catch (_error) {
+      // Silent — popup stays quiet on save failures.
     }
   }, 80);
 }
@@ -146,7 +133,6 @@ function syncHexFromColour(key) {
 function syncColourFromHex(key) {
   const hex = normaliseHex(colourFields[key].hex.value);
   if (!hex) {
-    setStatus(`Invalid ${ key } colour.`, 'error');
     return;
   }
   colourFields[key].colour.value = hex.toLowerCase();
@@ -161,9 +147,8 @@ function applyFromSlackPaste() {
     parsed.colourSchemeEnabled = colourSchemeEnabled.checked;
     writeThemeToForm(parsed);
     scheduleSave(parsed);
-    setStatus('Imported Slack theme.', 'ok');
-  } catch (error) {
-    setStatus(error.message || 'Could not parse theme.', 'error');
+  } catch (_error) {
+    // Invalid paste — leave the previous theme in place.
   }
 }
 
@@ -181,13 +166,11 @@ function exportCsv() {
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
-  setStatus('CSV exported.', 'ok');
 }
 
 async function resetTheme() {
   writeThemeToForm(DEFAULT_THEME);
   await saveTheme(DEFAULT_THEME);
-  setStatus('Reset to default.', 'ok');
 }
 
 function syncApiGatedUi() {
@@ -217,18 +200,6 @@ function scheduleSaveSettings() {
       ...settings,
       themeRenameEnabled: renameOn,
     });
-
-    if (!token) {
-      setStatus('Enter an API key to enable API features.', '');
-      return;
-    }
-
-    setStatus(
-      activeStoreHandle
-        ? `API key saved for ${ activeStoreHandle }.`
-        : 'API key saved locally.',
-      'ok',
-    );
   }, 120);
 }
 
@@ -295,21 +266,10 @@ async function hydrate() {
   const hasKey = Boolean(accessToken.value.trim());
   themeRenameEnabled.checked = hasKey && settings.themeRenameEnabled === true;
   syncApiGatedUi();
-  tokenStoreHint.textContent = storeHandle
-    ? `Store: ${ storeHandle }`
-    : 'Open a store admin tab to bind this key to a shop.';
 
   if (popupParams.get('focus') === 'token') {
     accessToken.focus();
     accessToken.select();
-    setStatus('Paste an API key for this store, then enable Renaming themes.', 'ok');
-  } else {
-    setStatus(
-      theme.colourSchemeEnabled === false
-        ? 'Colour scheme off.'
-        : 'Live on admin.',
-      'ok',
-    );
   }
 }
 
