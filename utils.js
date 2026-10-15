@@ -224,7 +224,13 @@ function createThemeActions() {
       node = node.parentElement;
     }
 
-    return parseAdminContext().themeId;
+    // Do not fall back to /themes/{id} from the URL — that matches the
+    // theme editor/customize view, where we must not attach actions.
+    return null;
+  }
+
+  function isThemeEditorPage(url = location.href) {
+    return /\/themes\/\d+(?:\/|$|\?|#)/.test(String(url || ''));
   }
 
   function looksLikeThemeName(element) {
@@ -333,6 +339,10 @@ function createThemeActions() {
   }
 
   function collectThemeNameTargets() {
+    if (isThemeEditorPage()) {
+      return [];
+    }
+
     const bestByThemeId = new Map();
 
     function consider(element, themeId) {
@@ -397,13 +407,6 @@ function createThemeActions() {
         consider(candidate, themeId);
       });
     });
-
-    const { themeId: pageThemeId } = parseAdminContext();
-    if (pageThemeId) {
-      queryAllDeep('h1, h2, h3').forEach((heading) => {
-        consider(heading, pageThemeId);
-      });
-    }
 
     for (const [themeId, element] of bestByThemeId) {
       element.dataset.shopifySkinsThemeId = themeId;
@@ -493,6 +496,11 @@ function createThemeActions() {
   }
 
   function decorate() {
+    if (isThemeEditorPage()) {
+      clearAllButtons();
+      return;
+    }
+
     const anyEnabled = plugins.some((plugin) => enabledById[plugin.id]);
     if (!anyEnabled) {
       clearAllButtons();
