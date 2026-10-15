@@ -35,8 +35,6 @@ const storeSwitchEnabled = document.getElementById('storeSwitchEnabled');
 const storeSwitchRow = document.getElementById('storeSwitchRow');
 const storeSwitchExpand = document.getElementById('storeSwitchExpand');
 const storeSwitchSettings = document.getElementById('storeSwitchSettings');
-const storeSwitchHint = document.getElementById('storeSwitchHint');
-const storeSwitchTargets = document.getElementById('storeSwitchTargets');
 const exportButton = document.getElementById('exportButton');
 const resetButton = document.getElementById('resetButton');
 const swatches = document.getElementById('swatches');
@@ -214,55 +212,6 @@ function syncApiGatedUi() {
   }
 }
 
-function renderStoreSwitchTargets(settings, storeHandle) {
-  const targets = keyedStoreHandles(settings, {
-    excludeHandle: storeHandle,
-  });
-  const switchOn = storeSwitchEnabled.checked;
-
-  storeSwitchTargets.replaceChildren();
-
-  if (!targets.length) {
-    storeSwitchHint.textContent = 'Enter API keys on other stores to switch between them.';
-    return;
-  }
-
-  storeSwitchHint.textContent = switchOn
-    ? 'Open the same admin page on another store you\'ve entered an API key for.'
-    : 'Turn on Switch stores, then pick a destination.';
-
-  for (const handle of targets) {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'storeSwitchTarget';
-    button.textContent = handle;
-    button.title = `Switch to ${ handle }`;
-    button.disabled = !switchOn;
-    button.addEventListener('click', () => {
-      switchToStore(handle);
-    });
-    storeSwitchTargets.appendChild(button);
-  }
-}
-
-async function switchToStore(targetStoreHandle) {
-  try {
-    const result = await chrome.runtime.sendMessage({
-      type: 'shopifySkinsSwitchStore',
-      payload: {
-        targetStoreHandle,
-        currentStoreHandle: activeStoreHandle,
-      },
-    });
-    if (!result?.ok) {
-      storeSwitchHint.textContent = result?.error?.message
-        || 'Could not switch stores.';
-    }
-  } catch (_error) {
-    storeSwitchHint.textContent = 'Could not switch stores.';
-  }
-}
-
 function scheduleSaveSettings() {
   if (settingsTimer) {
     clearTimeout(settingsTimer);
@@ -277,7 +226,6 @@ function scheduleSaveSettings() {
     themeRenameEnabled.checked = renameOn;
     storeSwitchEnabled.checked = switchOn;
     syncApiGatedUi();
-    renderStoreSwitchTargets(settings, activeStoreHandle);
 
     await saveSettings({
       ...settings,
@@ -352,15 +300,7 @@ accessToken.addEventListener('input', () => {
 });
 themePreviewEnabled.addEventListener('change', scheduleSaveSettings);
 themeRenameEnabled.addEventListener('change', scheduleSaveSettings);
-storeSwitchEnabled.addEventListener('change', async () => {
-  try {
-    const settings = await loadSettings();
-    renderStoreSwitchTargets(settings, activeStoreHandle);
-  } catch (_error) {
-    // Keep previous target list if settings reload fails.
-  }
-  scheduleSaveSettings();
-});
+storeSwitchEnabled.addEventListener('change', scheduleSaveSettings);
 
 async function hydrate() {
   const storeHandle = await resolveActiveStoreHandle();
@@ -375,7 +315,6 @@ async function hydrate() {
   themeRenameEnabled.checked = hasKey && settings.themeRenameEnabled === true;
   storeSwitchEnabled.checked = hasKey && settings.storeSwitchEnabled === true;
   syncApiGatedUi();
-  renderStoreSwitchTargets(settings, storeHandle);
 
   if (popupParams.get('focus') === 'token') {
     accessToken.focus();

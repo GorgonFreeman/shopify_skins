@@ -6,7 +6,8 @@ const DEFAULT_SETTINGS = {
   accessTokensByStore: {},
   themePreviewEnabled: false,
   themeRenameEnabled: false,
-  storeSwitchEnabled: false,
+  // Pill shows when enabled and 2+ stores have keyed tokens.
+  storeSwitchEnabled: true,
 };
 
 async function loadSettings() {

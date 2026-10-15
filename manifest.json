@@ -39,7 +39,8 @@
         "utils.js",
         "content.js",
         "preview.js",
-        "rename.js"
+        "rename.js",
+        "store_switch_ui.js"
       ],
       "run_at": "document_start",
       "all_frames": true
