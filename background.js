@@ -482,6 +482,15 @@ function adminResourceUrl(storeHandle, resource, id) {
   return `https://admin.shopify.com/store/${ store }/${ path }/${ resourceId }`;
 }
 
+function resourceIdFromUrl(url, resource) {
+  const path = String(resource || '').trim().replace(/^\/+|\/+$/g, '');
+  if (!path) {
+    return null;
+  }
+  const match = String(url || '').match(new RegExp(`\\/${ path }\\/(\\d+)`));
+  return match?.[1] || null;
+}
+
 function discountTitle(discountNode) {
   return String(discountNode?.discount?.title || '').trim();
 }
@@ -494,34 +503,24 @@ async function switchProductByHandle({
   url,
   targetStoreHandle,
   currentStoreHandle,
-  productHandle,
 }) {
-  let handle = String(productHandle || '').trim();
-
-  // Prefer handle from the admin UI; fall back to looking it up on this store.
-  if (!handle && currentStoreHandle) {
-    const productId = String(url || '').match(/\/products\/(\d+)/)?.[1];
-    if (productId) {
-      const current = await findProductHandleById(currentStoreHandle, productId);
-      if (current.ok) {
-        handle = current.data.handle;
-      } else if (current.error?.code !== 'MISSING_TOKEN') {
-        return current;
-      }
-    }
-  }
-
-  if (!handle) {
+  const productId = resourceIdFromUrl(url, 'products');
+  if (!currentStoreHandle || !productId) {
     return {
       ok: false,
       error: {
-        code: 'MISSING_PRODUCT_HANDLE',
-        message: 'Could not read the product handle from this page.',
+        code: 'MISSING_PRODUCT_ID',
+        message: 'Open a product admin URL to switch by handle.',
       },
     };
   }
 
-  const lookup = await findProductByHandle(targetStoreHandle, handle);
+  const current = await findProductHandleById(currentStoreHandle, productId);
+  if (!current.ok) {
+    return current;
+  }
+
+  const lookup = await findProductByHandle(targetStoreHandle, current.data.handle);
   if (!lookup.ok) {
     return lookup;
   }
@@ -659,33 +658,24 @@ async function switchCollectionByHandle({
   url,
   targetStoreHandle,
   currentStoreHandle,
-  collectionHandle,
 }) {
-  let handle = String(collectionHandle || '').trim();
-
-  if (!handle && currentStoreHandle) {
-    const collectionId = String(url || '').match(/\/collections\/(\d+)/)?.[1];
-    if (collectionId) {
-      const current = await findCollectionHandleById(currentStoreHandle, collectionId);
-      if (current.ok) {
-        handle = current.data.handle;
-      } else if (current.error?.code !== 'MISSING_TOKEN') {
-        return current;
-      }
-    }
-  }
-
-  if (!handle) {
+  const collectionId = resourceIdFromUrl(url, 'collections');
+  if (!currentStoreHandle || !collectionId) {
     return {
       ok: false,
       error: {
-        code: 'MISSING_COLLECTION_HANDLE',
-        message: 'Could not read the collection handle from this page.',
+        code: 'MISSING_COLLECTION_ID',
+        message: 'Open a collection admin URL to switch by handle.',
       },
     };
   }
 
-  const lookup = await findCollectionByHandle(targetStoreHandle, handle);
+  const current = await findCollectionHandleById(currentStoreHandle, collectionId);
+  if (!current.ok) {
+    return current;
+  }
+
+  const lookup = await findCollectionByHandle(targetStoreHandle, current.data.handle);
   if (!lookup.ok) {
     return lookup;
   }
@@ -823,33 +813,24 @@ async function switchCustomerByEmail({
   url,
   targetStoreHandle,
   currentStoreHandle,
-  customerEmail,
 }) {
-  let email = String(customerEmail || '').trim();
-
-  if (!email && currentStoreHandle) {
-    const customerId = String(url || '').match(/\/customers\/(\d+)/)?.[1];
-    if (customerId) {
-      const current = await findCustomerEmailById(currentStoreHandle, customerId);
-      if (current.ok) {
-        email = current.data.email;
-      } else if (current.error?.code !== 'MISSING_TOKEN') {
-        return current;
-      }
-    }
-  }
-
-  if (!email) {
+  const customerId = resourceIdFromUrl(url, 'customers');
+  if (!currentStoreHandle || !customerId) {
     return {
       ok: false,
       error: {
-        code: 'MISSING_CUSTOMER_EMAIL',
-        message: 'Could not read the customer email from this page.',
+        code: 'MISSING_CUSTOMER_ID',
+        message: 'Open a customer admin URL to switch by email.',
       },
     };
   }
 
-  const lookup = await findCustomerByEmail(targetStoreHandle, email);
+  const current = await findCustomerEmailById(currentStoreHandle, customerId);
+  if (!current.ok) {
+    return current;
+  }
+
+  const lookup = await findCustomerByEmail(targetStoreHandle, current.data.email);
   if (!lookup.ok) {
     return lookup;
   }
@@ -991,33 +972,24 @@ async function switchDiscountByName({
   url,
   targetStoreHandle,
   currentStoreHandle,
-  discountName,
 }) {
-  let title = String(discountName || '').trim();
-
-  if (!title && currentStoreHandle) {
-    const discountId = String(url || '').match(/\/discounts\/(\d+)/)?.[1];
-    if (discountId) {
-      const current = await findDiscountTitleById(currentStoreHandle, discountId);
-      if (current.ok) {
-        title = current.data.title;
-      } else if (current.error?.code !== 'MISSING_TOKEN') {
-        return current;
-      }
-    }
-  }
-
-  if (!title) {
+  const discountId = resourceIdFromUrl(url, 'discounts');
+  if (!currentStoreHandle || !discountId) {
     return {
       ok: false,
       error: {
-        code: 'MISSING_DISCOUNT_NAME',
-        message: 'Could not read the discount name from this page.',
+        code: 'MISSING_DISCOUNT_ID',
+        message: 'Open a discount admin URL to switch by name.',
       },
     };
   }
 
-  const lookup = await findDiscountByTitle(targetStoreHandle, title);
+  const current = await findDiscountTitleById(currentStoreHandle, discountId);
+  if (!current.ok) {
+    return current;
+  }
+
+  const lookup = await findDiscountByTitle(targetStoreHandle, current.data.title);
   if (!lookup.ok) {
     return lookup;
   }
@@ -1172,33 +1144,24 @@ async function switchThemeByName({
   url,
   targetStoreHandle,
   currentStoreHandle,
-  themeName,
 }) {
-  let name = String(themeName || '').trim();
-
-  if (!name && currentStoreHandle) {
-    const themeId = String(url || '').match(/\/themes\/(\d+)/)?.[1];
-    if (themeId) {
-      const current = await findThemeNameById(currentStoreHandle, themeId);
-      if (current.ok) {
-        name = current.data.name;
-      } else if (current.error?.code !== 'MISSING_TOKEN') {
-        return current;
-      }
-    }
-  }
-
-  if (!name) {
+  const themeId = resourceIdFromUrl(url, 'themes');
+  if (!currentStoreHandle || !themeId) {
     return {
       ok: false,
       error: {
-        code: 'MISSING_THEME_NAME',
-        message: 'Could not read the theme name from this page.',
+        code: 'MISSING_THEME_ID',
+        message: 'Open a theme editor URL to switch by name.',
       },
     };
   }
 
-  const lookup = await findThemeByName(targetStoreHandle, name);
+  const current = await findThemeNameById(currentStoreHandle, themeId);
+  if (!current.ok) {
+    return current;
+  }
+
+  const lookup = await findThemeByName(targetStoreHandle, current.data.name);
   if (!lookup.ok) {
     return lookup;
   }
@@ -1407,11 +1370,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         targetStoreHandle,
         currentStoreHandle: message.payload?.currentStoreHandle
           || storeHandleFromUrl(tab.url),
-        productHandle: message.payload?.productHandle || '',
-        collectionHandle: message.payload?.collectionHandle || '',
-        customerEmail: message.payload?.customerEmail || '',
-        discountName: message.payload?.discountName || '',
-        themeName: message.payload?.themeName || '',
       });
 
       if (!resolved?.ok) {
