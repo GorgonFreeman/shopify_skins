@@ -53,7 +53,12 @@
       },
     }).then(async (result) => {
       if (!result?.ok) {
-        restoreLabel(labelEl, originalHtml, previousName);
+        labelEl.dataset.shopifySkinsThemeName = previousName;
+        restoreLabel(
+          labelEl,
+          originalHtml,
+          ThemeActions.labelTextWithName(labelEl, previousName),
+        );
         ThemeActions.scheduleDecorate();
         const code = result?.error?.code;
         if (code === 'MISSING_TOKEN' || code === 'AUTH_ERROR') {
@@ -76,12 +81,22 @@
 
       const confirmedName = result?.data?.theme?.name || name;
       if (confirmedName !== name) {
-        restoreLabel(labelEl, originalHtml, confirmedName);
+        labelEl.dataset.shopifySkinsThemeName = confirmedName;
+        restoreLabel(
+          labelEl,
+          originalHtml,
+          ThemeActions.labelTextWithName(labelEl, confirmedName),
+        );
       }
       ThemeActions.scheduleDecorate();
       toast(`Renamed to “${ confirmedName }”.`, 'ok');
     }).catch((error) => {
-      restoreLabel(labelEl, originalHtml, previousName);
+      labelEl.dataset.shopifySkinsThemeName = previousName;
+      restoreLabel(
+        labelEl,
+        originalHtml,
+        ThemeActions.labelTextWithName(labelEl, previousName),
+      );
       ThemeActions.scheduleDecorate();
       toast(error?.message || 'Rename failed.', 'error');
     });
@@ -118,7 +133,7 @@
         || labelEl.dataset.shopifySkinsThemeId
         || '',
     );
-    const previousName = (labelEl.textContent || '').trim();
+    const previousName = ThemeActions.themeNameFromLabel(labelEl);
     const originalHtml = labelEl.innerHTML;
 
     if (!themeId || !previousName) {
@@ -258,7 +273,8 @@
         return;
       }
 
-      restoreLabel(labelEl, originalHtml, nextName);
+      labelEl.dataset.shopifySkinsThemeName = nextName;
+      restoreLabel(labelEl, originalHtml, ThemeActions.labelTextWithName(labelEl, nextName));
       ThemeActions.scheduleDecorate();
 
       renameInBackground({

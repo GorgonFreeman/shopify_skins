@@ -20,11 +20,50 @@ const bundled = [
 ].join('\n;\n');
 
 // Mirrors current admin: title outside the Customize CTA link (often with an SVG).
+// Also includes an open ActionList ("Duplicate in Canvas") which must NOT get icons.
 const html = `<!DOCTYPE html>
 <html>
 <head><title>Themes</title></head>
 <body>
   <div class="Polaris-Page">
+    <div class="_PublishedTheme_1nfrl_1">
+      <div class="_ThemeInformation_1nfrl_109">
+        <span class="Online-Store-UI-TruncateObserver__Truncate_11pmk">Live Theme &middot; Last saved: Yesterday at 4:34 pm</span>
+        <span
+          data-click-enabled="true"
+          data-component-name="theme-index-customize-button"
+          data-component-extra-theme-name="Live Theme"
+        >
+          <a href="/store/demo-shop/themes/111111111/editor">Edit theme</a>
+        </span>
+      </div>
+      <ul class="Polaris-ActionList">
+        <li class="Polaris-Box">
+          <button
+            type="button"
+            class="Polaris-ActionList__Item Polaris-ActionList--default"
+            aria-label="Duplicate in Canvas"
+          >
+            <span class="Polaris-ActionList__Text">
+              <span class="Polaris-Text--root Polaris-Text--bodyMd Polaris-Text--regular">
+                <span class="Polaris-Text--root Polaris-Text--bodyMd Polaris-Text--regular">
+                  Duplicate in Canvas
+                </span>
+              </span>
+            </span>
+          </button>
+        </li>
+        <li class="Polaris-Box">
+          <a
+            href="/store/demo-shop/themes/111111111"
+            class="Polaris-ActionList__Item"
+            aria-label="Edit code"
+          >
+            Edit code
+          </a>
+        </li>
+      </ul>
+    </div>
     <div class="Polaris-ShadowBevel theme-card">
       <h2 class="Polaris-Text--root Polaris-Text--headingSm">Dawn</h2>
       <p class="Polaris-Text--root">Added yesterday</p>
@@ -155,20 +194,33 @@ await page.waitForTimeout(250);
 const withRenameOn = await page.evaluate(() => {
   const pencils = [...document.querySelectorAll('[data-shopify-skins-rename-btn]')];
   const previews = [...document.querySelectorAll('[data-shopify-skins-preview-btn]')];
+  const actionMenuIcons = [...document.querySelectorAll(
+    '.Polaris-ActionList [data-shopify-skins-rename-btn], .Polaris-ActionList [data-shopify-skins-preview-btn]',
+  )];
+  const publishedLabel = document.querySelector(
+    '[data-shopify-skins-theme-id="111111111"]',
+  );
   return {
     href: location.href,
     pencilCount: pencils.length,
     previewCount: previews.length,
     themeIds: pencils.map((el) => el.dataset.themeId),
     previewThemeIds: previews.map((el) => el.dataset.themeId),
+    actionMenuIconCount: actionMenuIcons.length,
+    publishedLabelText: publishedLabel
+      ? ThemeActions.themeNameFromLabel(publishedLabel)
+      : null,
+    publishedHasNameAttr: Boolean(publishedLabel?.dataset?.shopifySkinsThemeName),
     labels: [...document.querySelectorAll('h2')].map((el) => el.textContent.trim()),
   };
 });
 console.log('withRenameOn', withRenameOn);
 
-// Click first pencil, rename, Enter (beginRename is async)
+// Click Dawn pencil, rename, Enter (beginRename is async)
 const renameFlow = await page.evaluate(async () => {
-  const pencil = document.querySelector('[data-shopify-skins-rename-btn]');
+  const pencil = document.querySelector(
+    '[data-shopify-skins-rename-btn][data-theme-id="123456789"]',
+  );
   if (!pencil) {
     return { error: 'no pencil' };
   }
@@ -269,18 +321,22 @@ console.log('pageErrors', errors);
 await browser.close();
 
 const renameMsg = renameFlow.messages?.find((m) => m.type === 'shopifySkinsRenameTheme');
-const ok = withRenameOn.pencilCount === 2
-  && withRenameOn.previewCount === 2
+const ok = withRenameOn.pencilCount === 3
+  && withRenameOn.previewCount === 3
   && withRenameOn.themeIds.includes('123456789')
+  && withRenameOn.themeIds.includes('111111111')
   && withRenameOn.previewThemeIds.includes('123456789')
+  && withRenameOn.actionMenuIconCount === 0
+  && withRenameOn.publishedLabelText === 'Live Theme'
+  && withRenameOn.publishedHasNameAttr === true
   && renameMsg?.payload?.name === 'Dawn Renamed'
   && renameMsg?.payload?.storeHandle === 'demo-shop'
   && renameMsg?.payload?.themeId === '123456789'
   && afterDisable.pencilCount === 0
-  && afterDisable.previewCount === 2
+  && afterDisable.previewCount === 3
   && afterNoToken.pencilCount === 0
-  && afterNoToken.previewCount === 2
-  && afterPreviewOff.pencilCount === 2
+  && afterNoToken.previewCount === 3
+  && afterPreviewOff.pencilCount === 3
   && afterPreviewOff.previewCount === 0
   && errors.length === 0;
 

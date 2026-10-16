@@ -137,8 +137,15 @@ function createThemeActions() {
   const EDITING_ATTR = 'data-shopify-skins-renaming';
   const MAX_THEME_NAME_LENGTH = 50;
   const TEAL = '#0D9488';
-  const ACTION_LABEL_RE = /^(customize|preview|edit code|actions?|publish|unpublish|remove|duplicate|download|rename|view|more|add theme|add|save|cancel|close|copy|open|editor)$/i;
-
+  const ACTION_LABEL_RE = /^(customize|preview(\s*\(.*\))?|edit code|edit theme|edit default theme content|actions?|publish(:\s*.+)?|unpublish|remove|duplicate(\s+in\s+canvas)?|download(\s+theme(\s+file)?)?|rename|view|more(\s+actions)?|add theme|add|save|cancel|close|copy|open|editor|import|theme actions|click for more theme actions|create a new theme in canvas|version\s+[\d.]+)$/i;
+  const ACTION_MENU_SELECTOR = [
+    '.Polaris-ActionList',
+    '.Polaris-ActionList__Item',
+    '.Polaris-ActionList__Text',
+    '[role="menu"]',
+    '[role="menuitem"]',
+    '[role="listbox"]',
+  ].join(', ');
   const plugins = [];
   const enabledById = {};
 
@@ -150,6 +157,37 @@ function createThemeActions() {
 
   function isActionLabel(text) {
     return ACTION_LABEL_RE.test(String(text || '').trim());
+  }
+
+  function isInsideActionMenu(element) {
+    return Boolean(element?.closest?.(ACTION_MENU_SELECTOR));
+  }
+
+  function splitLastSavedLabel(text) {
+    const raw = String(text || '');
+    const lastSavedIdx = raw.search(/\bLast saved:/i);
+    if (lastSavedIdx <= 0) {
+      return {
+        name: raw.trim(),
+        suffix: '',
+      };
+    }
+    return {
+      name: raw.slice(0, lastSavedIdx).replace(/[^\w)\]}'"]+$/u, '').trim(),
+      suffix: raw.slice(lastSavedIdx).replace(/^\s*/, ' · '),
+    };
+  }
+
+  function themeNameFromLabel(element) {
+    if (element?.dataset?.shopifySkinsThemeName) {
+      return element.dataset.shopifySkinsThemeName.trim();
+    }
+    return splitLastSavedLabel(cleanText(element)).name;
+  }
+
+  function labelTextWithName(element, nextName) {
+    const { suffix } = splitLastSavedLabel(cleanText(element));
+    return suffix ? `${ nextName }${ suffix }` : nextName;
   }
 
   function buttonAttrs() {
@@ -240,6 +278,9 @@ function createThemeActions() {
     if (element.matches('button, input, textarea, svg, script, style')) {
       return false;
     }
+    if (isInsideActionMenu(element)) {
+      return false;
+    }
     const selector = actionButtonSelector();
     if (selector && (element.matches(selector) || element.closest(selector))) {
       return false;
@@ -249,10 +290,11 @@ function createThemeActions() {
     }
 
     const text = cleanText(element);
-    if (!text || text.length > MAX_THEME_NAME_LENGTH + 10) {
+    const name = themeNameFromLabel(element);
+    if (!name || name.length > MAX_THEME_NAME_LENGTH + 10) {
       return false;
     }
-    if (isActionLabel(text)) {
+    if (isActionLabel(name) || isActionLabel(text)) {
       return false;
     }
     if (element.children.length > 4) {
@@ -276,6 +318,12 @@ function createThemeActions() {
     if (String(element.className || '').includes('Polaris-Text')) {
       score += 8;
     }
+    if (String(element.className || '').includes('headingSm')) {
+      score += 12;
+    }
+    if (element.dataset?.shopifySkinsThemeName) {
+      score += 25;
+    }
     if (element.children.length === 0) {
       score += 10;
     } else if (element.children.length === 1) {
@@ -284,7 +332,10 @@ function createThemeActions() {
     if (element.querySelector('h1, h2, h3, h4')) {
       score -= 15;
     }
-    score -= Math.max(0, cleanText(element).length - 24) * 0.2;
+    if (isInsideActionMenu(element)) {
+      score -= 50;
+    }
+    score -= Math.max(0, themeNameFromLabel(element).length - 24) * 0.2;
     return score;
   }
 
@@ -404,6 +455,41 @@ function createThemeActions() {
       }
       const card = findCardRoot(link);
       queryAllDeep('h1, h2, h3, h4, p, span, [class*="Polaris-Text"]', card).forEach((candidate) => {
+        consider(candidate, themeId);
+      });
+    });
+
+    // Published theme card: name lives in a truncate span with " · Last saved",
+    // while the clean name is on data-component-extra-theme-name.
+    queryAllDeep('[data-component-extra-theme-name]').forEach((el) => {
+      const name = el.getAttribute('data-component-extra-theme-name')?.trim();
+      const themeId = findThemeIdNear(el);
+      if (!name || !themeId) {
+        return;
+      }
+
+      const card = el.closest('[class*="PublishedTheme"]') || findCardRoot(el);
+      const nameSelector = [
+        'h1',
+        'h2',
+        'h3',
+        'h4',
+        'p',
+        'span',
+        '[class*="Polaris-Text"]',
+        '[class*="Truncate"]',
+      ].join(', ');
+
+      queryAllDeep(nameSelector, card).forEach((candidate) => {
+        if (isInsideActionMenu(candidate)) {
+          return;
+        }
+        const text = cleanText(candidate);
+        const nameFromText = splitLastSavedLabel(text).name;
+        if (text !== name && nameFromText !== name) {
+          return;
+        }
+        candidate.dataset.shopifySkinsThemeName = name;
         consider(candidate, themeId);
       });
     });
@@ -641,6 +727,8 @@ function createThemeActions() {
     resolveStoreHandle,
     findThemeIdNear,
     collectThemeNameTargets,
+    themeNameFromLabel,
+    labelTextWithName,
     actionColour,
     toast,
     queryAllDeep,
