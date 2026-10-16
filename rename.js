@@ -36,10 +36,170 @@
     });
   }
 
+  function themesFromAdminJsonPayload(payload) {
+    if (Array.isArray(payload?.themes)) {
+      return payload.themes;
+    }
+    if (Array.isArray(payload)) {
+      return payload;
+    }
+    if (Array.isArray(payload?.data?.themes)) {
+      return payload.data.themes;
+    }
+    if (Array.isArray(payload?.themes?.nodes)) {
+      return payload.themes.nodes;
+    }
+    return [];
+  }
+
+  async function findThemeIdFromAdminJson(storeHandle, themeName) {
+    const handle = String(storeHandle || '').trim();
+    const name = String(themeName || '').trim().toLowerCase();
+    if (!handle || !name) {
+      return {
+        ok: false,
+        error: {
+          code: 'MISSING_ARGS',
+          message: 'Need store handle and theme name.',
+        },
+      };
+    }
+
+    let response;
+    try {
+      response = await fetch(
+        `https://admin.shopify.com/store/${ handle }/themes.json`,
+        {
+          credentials: 'include',
+          headers: {
+            Accept: 'application/json',
+          },
+        },
+      );
+    } catch (error) {
+      return {
+        ok: false,
+        error: {
+          code: 'NETWORK_ERROR',
+          message: 'Could not reach admin themes.json.',
+          details: String(error?.message || error),
+        },
+      };
+    }
+
+    if (!response.ok) {
+      return {
+        ok: false,
+        error: {
+          code: response.status === 401 || response.status === 403
+            ? 'AUTH_ERROR'
+            : 'HTTP_ERROR',
+          message: `themes.json returned HTTP ${ response.status }.`,
+        },
+      };
+    }
+
+    let payload;
+    try {
+      payload = await response.json();
+    } catch (error) {
+      return {
+        ok: false,
+        error: {
+          code: 'BAD_RESPONSE',
+          message: 'themes.json returned non-JSON.',
+          details: String(error?.message || error),
+        },
+      };
+    }
+
+    const themes = themesFromAdminJsonPayload(payload);
+    const matches = themes.filter((theme) => (
+      String(theme?.name || '').trim().toLowerCase() === name
+    ));
+    // Duplicate "Copy of …" names are common — prefer a still-processing theme,
+    // then the newest by created_at.
+    matches.sort((left, right) => {
+      const processingDelta = Number(Boolean(right?.processing))
+        - Number(Boolean(left?.processing));
+      if (processingDelta !== 0) {
+        return processingDelta;
+      }
+      const leftCreated = Date.parse(left?.created_at || '') || 0;
+      const rightCreated = Date.parse(right?.created_at || '') || 0;
+      return rightCreated - leftCreated;
+    });
+    const match = matches[0] || null;
+    const themeId = gidToId(
+      match?.admin_graphql_api_id || match?.id || match?.theme_id || '',
+    );
+    if (!themeId) {
+      return {
+        ok: false,
+        error: {
+          code: 'THEME_NOT_FOUND',
+          message: `No theme named “${ themeName }” in themes.json.`,
+        },
+      };
+    }
+
+    return {
+      ok: true,
+      themeId,
+      source: 'admin-json',
+      processing: Boolean(match?.processing),
+    };
+  }
+
+  async function resolveThemeIdByName(storeHandle, themeName, {
+    attempts = 8,
+    delayMs = 750,
+  } = {}) {
+    let lastError = null;
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      try {
+        const apiResult = await chrome.runtime.sendMessage({
+          type: 'shopifySkinsFindThemeByName',
+          payload: {
+            storeHandle,
+            themeName,
+          },
+        });
+        if (apiResult?.ok && apiResult?.data?.theme?.id) {
+          return {
+            ok: true,
+            themeId: gidToId(apiResult.data.theme.id),
+            source: 'admin-api',
+          };
+        }
+        lastError = apiResult?.error || null;
+
+        // No token, auth issue, or API doesn't see the theme yet — try session themes.json.
+        const jsonResult = await findThemeIdFromAdminJson(storeHandle, themeName);
+        if (jsonResult.ok) {
+          return jsonResult;
+        }
+        lastError = jsonResult.error || lastError;
+      } catch (error) {
+        lastError = {
+          message: String(error?.message || error),
+        };
+      }
+      if (attempt < attempts - 1) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+    return {
+      ok: false,
+      error: lastError,
+    };
+  }
+
   function renameInBackground({
     storeHandle,
     themeId,
     name,
+    lookupName,
     labelEl,
     originalHtml,
     previousName,
@@ -50,6 +210,7 @@
         storeHandle,
         themeId: gidToId(themeId),
         name,
+        lookupName,
       },
     }).then(async (result) => {
       if (!result?.ok) {
@@ -128,20 +289,25 @@
     }
 
     const storeHandle = await ThemeActions.resolveStoreHandle();
-    const themeId = gidToId(
-      ThemeActions.findThemeIdNear(labelEl)
-        || labelEl.dataset.shopifySkinsThemeId
-        || '',
-    );
+    const rawThemeId = ThemeActions.findThemeIdNear(labelEl)
+      || labelEl.dataset.shopifySkinsThemeId
+      || '';
+    const pendingCopy = labelEl.dataset.shopifySkinsPendingCopy === 'true'
+      || ThemeActions.isPendingThemeId(rawThemeId);
+    let themeId = pendingCopy ? '' : gidToId(rawThemeId);
     const previousName = ThemeActions.themeNameFromLabel(labelEl);
     const originalHtml = labelEl.innerHTML;
 
-    if (!themeId || !previousName) {
-      toast('Could not find theme id for rename.', 'error');
+    if (!previousName) {
+      toast('Could not find theme name for rename.', 'error');
       return;
     }
     if (!storeHandle) {
       toast('Could not detect store from this admin tab.', 'error');
+      return;
+    }
+    if (!themeId && !pendingCopy) {
+      toast('Could not find theme id for rename.', 'error');
       return;
     }
 
@@ -277,14 +443,41 @@
       restoreLabel(labelEl, originalHtml, ThemeActions.labelTextWithName(labelEl, nextName));
       ThemeActions.scheduleDecorate();
 
-      renameInBackground({
-        storeHandle,
-        themeId,
-        name: nextName,
-        labelEl,
-        originalHtml,
-        previousName,
-      });
+      (async () => {
+        let resolvedThemeId = themeId;
+        if (!resolvedThemeId || pendingCopy) {
+          toast('Waiting for copy to finish…');
+          const resolved = await resolveThemeIdByName(storeHandle, previousName);
+          if (!resolved.ok) {
+            labelEl.dataset.shopifySkinsThemeName = previousName;
+            restoreLabel(
+              labelEl,
+              originalHtml,
+              ThemeActions.labelTextWithName(labelEl, previousName),
+            );
+            ThemeActions.scheduleDecorate();
+            toast(
+              resolved.error?.message
+                || 'Theme is still copying. Try rename again in a moment.',
+              'error',
+            );
+            return;
+          }
+          resolvedThemeId = resolved.themeId;
+          labelEl.dataset.shopifySkinsThemeId = resolvedThemeId;
+          delete labelEl.dataset.shopifySkinsPendingCopy;
+        }
+
+        renameInBackground({
+          storeHandle,
+          themeId: resolvedThemeId,
+          name: nextName,
+          lookupName: previousName,
+          labelEl,
+          originalHtml,
+          previousName,
+        });
+      })();
     }
 
     function onPointerDown(event) {

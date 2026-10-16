@@ -64,6 +64,18 @@ const html = `<!DOCTYPE html>
         </li>
       </ul>
     </div>
+    <ul class="_ThemeList_11pt9_1">
+      <li>
+        <div class="_ThemeContent_dwfss_31">
+          <div class="Polaris-InlineStack">
+            <h3 class="Polaris-Text--root Polaris-Text--headingSm">Copy of Dawn</h3>
+          </div>
+          <span class="Polaris-Text--root Polaris-Text--bodyMd Polaris-Text--subdued">
+            <span class="_ThemeStatus_1v1vk_1">Copying your theme</span>
+          </span>
+        </div>
+      </li>
+    </ul>
     <div class="Polaris-ShadowBevel theme-card">
       <h2 class="Polaris-Text--root Polaris-Text--headingSm">Dawn</h2>
       <p class="Polaris-Text--root">Added yesterday</p>
@@ -97,6 +109,31 @@ page.on('console', (msg) => {
 });
 
 await page.route('https://admin.shopify.com/**', async (route) => {
+  const url = route.request().url();
+  if (url.includes('/themes.json')) {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      // Real admin themes.json is a bare array (not { themes: [...] }).
+      body: JSON.stringify([
+        {
+          id: 555555555,
+          name: 'Copy of Dawn',
+          created_at: '2026-10-16T12:00:00+11:00',
+          processing: true,
+          admin_graphql_api_id: 'gid://shopify/Theme/555555555',
+        },
+        {
+          id: 444444444,
+          name: 'Copy of Dawn',
+          created_at: '2026-10-16T11:00:00+11:00',
+          processing: false,
+          admin_graphql_api_id: 'gid://shopify/Theme/444444444',
+        },
+      ]),
+    });
+    return;
+  }
   await route.fulfill({
     status: 200,
     contentType: 'text/html',
@@ -167,6 +204,15 @@ await page.evaluate((source) => {
             },
           });
         }
+        if (message?.type === 'shopifySkinsFindThemeByName') {
+          return Promise.resolve({
+            ok: false,
+            error: {
+              code: 'MISSING_TOKEN',
+              message: 'An Admin API token is required to look up themes.',
+            },
+          });
+        }
         return Promise.resolve({ ok: true });
       },
     },
@@ -200,6 +246,15 @@ const withRenameOn = await page.evaluate(() => {
   const publishedLabel = document.querySelector(
     '[data-shopify-skins-theme-id="111111111"]',
   );
+  const copyingLabel = document.querySelector(
+    '[data-shopify-skins-pending-copy="true"]',
+  );
+  const copyingPencil = copyingLabel?.parentElement?.querySelector(
+    '[data-shopify-skins-rename-btn]',
+  );
+  const copyingPreview = copyingLabel?.parentElement?.querySelector(
+    '[data-shopify-skins-preview-btn]',
+  );
   return {
     href: location.href,
     pencilCount: pencils.length,
@@ -211,6 +266,11 @@ const withRenameOn = await page.evaluate(() => {
       ? ThemeActions.themeNameFromLabel(publishedLabel)
       : null,
     publishedHasNameAttr: Boolean(publishedLabel?.dataset?.shopifySkinsThemeName),
+    copyingLabelText: copyingLabel
+      ? ThemeActions.themeNameFromLabel(copyingLabel)
+      : null,
+    copyingHasPencil: Boolean(copyingPencil),
+    copyingHasPreview: Boolean(copyingPreview),
     labels: [...document.querySelectorAll('h2')].map((el) => el.textContent.trim()),
   };
 });
@@ -321,7 +381,7 @@ console.log('pageErrors', errors);
 await browser.close();
 
 const renameMsg = renameFlow.messages?.find((m) => m.type === 'shopifySkinsRenameTheme');
-const ok = withRenameOn.pencilCount === 3
+const ok = withRenameOn.pencilCount === 4
   && withRenameOn.previewCount === 3
   && withRenameOn.themeIds.includes('123456789')
   && withRenameOn.themeIds.includes('111111111')
@@ -329,6 +389,9 @@ const ok = withRenameOn.pencilCount === 3
   && withRenameOn.actionMenuIconCount === 0
   && withRenameOn.publishedLabelText === 'Live Theme'
   && withRenameOn.publishedHasNameAttr === true
+  && withRenameOn.copyingLabelText === 'Copy of Dawn'
+  && withRenameOn.copyingHasPencil === true
+  && withRenameOn.copyingHasPreview === false
   && renameMsg?.payload?.name === 'Dawn Renamed'
   && renameMsg?.payload?.storeHandle === 'demo-shop'
   && renameMsg?.payload?.themeId === '123456789'
@@ -336,7 +399,7 @@ const ok = withRenameOn.pencilCount === 3
   && afterDisable.previewCount === 3
   && afterNoToken.pencilCount === 0
   && afterNoToken.previewCount === 3
-  && afterPreviewOff.pencilCount === 3
+  && afterPreviewOff.pencilCount === 4
   && afterPreviewOff.previewCount === 0
   && errors.length === 0;
 

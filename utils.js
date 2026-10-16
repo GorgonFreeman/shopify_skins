@@ -137,7 +137,8 @@ function createThemeActions() {
   const EDITING_ATTR = 'data-shopify-skins-renaming';
   const MAX_THEME_NAME_LENGTH = 50;
   const TEAL = '#0D9488';
-  const ACTION_LABEL_RE = /^(customize|preview(\s*\(.*\))?|edit code|edit theme|edit default theme content|actions?|publish(:\s*.+)?|unpublish|remove|duplicate(\s+in\s+canvas)?|download(\s+theme(\s+file)?)?|rename|view|more(\s+actions)?|add theme|add|save|cancel|close|copy|open|editor|import|theme actions|click for more theme actions|create a new theme in canvas|version\s+[\d.]+)$/i;
+  const ACTION_LABEL_RE = /^(customize|preview(\s*\(.*\))?|edit code|edit theme|edit default theme content|actions?|publish(:\s*.+)?|unpublish|remove|duplicate(\s+in\s+canvas)?|download(\s+theme(\s+file)?)?|rename|view|more(\s+actions)?|add theme|add|save|cancel|close|copy|copying your theme|open|editor|import|theme actions|click for more theme actions|create a new theme in canvas|version\s+[\d.]+)$/i;
+  const COPYING_STATUS_RE = /^copying your theme$/i;
   const ACTION_MENU_SELECTOR = [
     '.Polaris-ActionList',
     '.Polaris-ActionList__Item',
@@ -161,6 +162,20 @@ function createThemeActions() {
 
   function isInsideActionMenu(element) {
     return Boolean(element?.closest?.(ACTION_MENU_SELECTOR));
+  }
+
+  function isPendingThemeId(themeId) {
+    return String(themeId || '').startsWith('pending-');
+  }
+
+  function pendingThemeKey(name) {
+    const text = String(name || '');
+    let hash = 0;
+    for (let index = 0; index < text.length; index += 1) {
+      hash = ((hash << 5) - hash) + text.charCodeAt(index);
+      hash |= 0;
+    }
+    return `pending-${ Math.abs(hash) }`;
   }
 
   function splitLastSavedLabel(text) {
@@ -234,14 +249,16 @@ function createThemeActions() {
   }
 
   function findThemeIdNear(element) {
-    if (element?.dataset?.shopifySkinsThemeId) {
-      return element.dataset.shopifySkinsThemeId;
+    const fromDataset = element?.dataset?.shopifySkinsThemeId;
+    if (fromDataset && !isPendingThemeId(fromDataset)) {
+      return fromDataset;
     }
 
     let node = element;
     while (node && node !== document.documentElement) {
-      if (node.dataset?.shopifySkinsThemeId) {
-        return node.dataset.shopifySkinsThemeId;
+      const nestedId = node.dataset?.shopifySkinsThemeId;
+      if (nestedId && !isPendingThemeId(nestedId)) {
+        return nestedId;
       }
 
       if (node instanceof HTMLAnchorElement) {
@@ -251,12 +268,13 @@ function createThemeActions() {
         }
       }
 
-      const link = node.querySelector?.('a[href*="/themes/"]');
-      if (link) {
-        const fromLink = extractThemeIdFromHref(link.href);
-        if (fromLink) {
-          return fromLink;
-        }
+      const ids = themeIdsIn(node);
+      if (ids.size === 1) {
+        return [...ids][0];
+      }
+      if (ids.size > 1) {
+        // Ancestor contains multiple themes — don't guess the first link.
+        return null;
       }
 
       node = node.parentElement;
@@ -356,6 +374,20 @@ function createThemeActions() {
     return ids;
   }
 
+  function isCopyingThemeRow(element) {
+    if (!(element instanceof HTMLElement)) {
+      return false;
+    }
+    const scope = element.closest('li')
+      || element.closest('[class*="ThemeContent"]')
+      || element.parentElement;
+    if (!scope?.querySelectorAll) {
+      return false;
+    }
+    return [...scope.querySelectorAll('[class*="ThemeStatus"]')]
+      .some((statusEl) => COPYING_STATUS_RE.test(cleanText(statusEl)));
+  }
+
   function findCardRoot(fromEl) {
     const cardSelector = [
       '.Polaris-ShadowBevel',
@@ -363,6 +395,8 @@ function createThemeActions() {
       '.Polaris-ResourceItem',
       '[class*="ThemeCard"]',
       '[class*="theme-card"]',
+      '[class*="PublishedTheme"]',
+      '[class*="ThemeContent"]',
       '[role="listitem"]',
       '[role="row"]',
       'li',
@@ -373,6 +407,10 @@ function createThemeActions() {
     let best = fromEl.parentElement || fromEl;
 
     for (let depth = 0; depth < 12 && node; depth += 1) {
+      // Don't absorb sibling theme rows from the library list.
+      if (node.matches?.('[class*="ThemeList"]')) {
+        break;
+      }
       const ids = themeIdsIn(node);
       if (ids.size > 1) {
         break;
@@ -440,9 +478,16 @@ function createThemeActions() {
       ].join(', ');
 
       queryAllDeep(nameSelector, card).forEach((candidate) => {
+        // Copying rows are handled separately — they often have no theme id yet.
+        if (isCopyingThemeRow(candidate)) {
+          return;
+        }
         consider(candidate, themeId);
       });
       card.querySelectorAll?.(nameSelector)?.forEach((candidate) => {
+        if (isCopyingThemeRow(candidate)) {
+          return;
+        }
         consider(candidate, themeId);
       });
     });
@@ -455,6 +500,9 @@ function createThemeActions() {
       }
       const card = findCardRoot(link);
       queryAllDeep('h1, h2, h3, h4, p, span, [class*="Polaris-Text"]', card).forEach((candidate) => {
+        if (isCopyingThemeRow(candidate)) {
+          return;
+        }
         consider(candidate, themeId);
       });
     });
@@ -481,7 +529,7 @@ function createThemeActions() {
       ].join(', ');
 
       queryAllDeep(nameSelector, card).forEach((candidate) => {
-        if (isInsideActionMenu(candidate)) {
+        if (isInsideActionMenu(candidate) || isCopyingThemeRow(candidate)) {
           return;
         }
         const text = cleanText(candidate);
@@ -492,6 +540,36 @@ function createThemeActions() {
         candidate.dataset.shopifySkinsThemeName = name;
         consider(candidate, themeId);
       });
+    });
+
+    // Duplicating themes: spinner + "Copying your theme", often with no /themes/{id} yet.
+    queryAllDeep('[class*="ThemeStatus"]').forEach((statusEl) => {
+      if (!COPYING_STATUS_RE.test(cleanText(statusEl))) {
+        return;
+      }
+
+      const card = statusEl.closest('li')
+        || statusEl.closest('[class*="ThemeContent"]')?.parentElement
+        || findCardRoot(statusEl);
+      if (!card) {
+        return;
+      }
+
+      const heading = card.querySelector?.('h3, h2, h1');
+      if (!heading || !looksLikeThemeName(heading)) {
+        return;
+      }
+
+      const name = themeNameFromLabel(heading) || cleanText(heading);
+      const realId = findThemeIdNear(heading) || findThemeIdNear(card);
+      const themeId = realId || pendingThemeKey(name);
+      heading.dataset.shopifySkinsThemeName = name;
+      if (realId) {
+        delete heading.dataset.shopifySkinsPendingCopy;
+      } else {
+        heading.dataset.shopifySkinsPendingCopy = 'true';
+      }
+      consider(heading, themeId);
     });
 
     for (const [themeId, element] of bestByThemeId) {
@@ -538,7 +616,11 @@ function createThemeActions() {
       return;
     }
 
-    const themeId = labelEl.dataset.shopifySkinsThemeId || findThemeIdNear(labelEl);
+    const pendingCopy = labelEl.dataset.shopifySkinsPendingCopy === 'true';
+    let themeId = labelEl.dataset.shopifySkinsThemeId || findThemeIdNear(labelEl);
+    if (!themeId && pendingCopy) {
+      themeId = pendingThemeKey(themeNameFromLabel(labelEl));
+    }
     if (!themeId) {
       return;
     }
@@ -553,7 +635,9 @@ function createThemeActions() {
     const ordered = [];
 
     for (const plugin of plugins) {
-      if (enabledById[plugin.id]) {
+      const showPlugin = enabledById[plugin.id]
+        && (!pendingCopy || plugin.id === 'rename');
+      if (showPlugin) {
         ordered.push(ensurePluginButton(plugin, labelEl, themeId, colour));
       } else {
         parent.querySelectorAll(`[${ plugin.buttonAttr }][data-theme-id="${ themeId }"]`).forEach((el) => {
@@ -729,6 +813,8 @@ function createThemeActions() {
     collectThemeNameTargets,
     themeNameFromLabel,
     labelTextWithName,
+    isPendingThemeId,
+    pendingThemeKey,
     actionColour,
     toast,
     queryAllDeep,

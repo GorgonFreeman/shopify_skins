@@ -131,6 +131,8 @@ const THEMES_BY_NAME_QUERY = `
       nodes {
         id
         name
+        processing
+        createdAt
       }
     }
   }
@@ -141,6 +143,7 @@ async function renameTheme({
   storeHandle,
   themeId,
   name,
+  lookupName,
   accessToken: accessTokenOverride,
 }) {
   const settings = await loadSettings();
@@ -158,7 +161,19 @@ async function renameTheme({
     };
   }
 
-  if (!storeHandle || !themeId || !name) {
+  let resolvedThemeId = gidToId(themeId);
+  if (
+    (!resolvedThemeId || String(themeId || '').startsWith('pending-'))
+    && lookupName
+  ) {
+    const lookup = await findThemeByName(storeHandle, lookupName);
+    if (!lookup.ok) {
+      return lookup;
+    }
+    resolvedThemeId = gidToId(lookup.data?.theme?.id);
+  }
+
+  if (!storeHandle || !resolvedThemeId || !name) {
     return {
       ok: false,
       error: {
@@ -181,7 +196,7 @@ async function renameTheme({
       body: JSON.stringify({
         query: THEME_UPDATE_MUTATION,
         variables: {
-          id: `gid://shopify/OnlineStoreTheme/${ gidToId(themeId) }`,
+          id: `gid://shopify/OnlineStoreTheme/${ resolvedThemeId }`,
           input: {
             name,
           },
@@ -1222,9 +1237,20 @@ async function findThemeByName(storeHandle, themeName) {
   }
 
   const nodes = result.data?.themes?.nodes || [];
-  const match = nodes.find((theme) => (
+  const matches = nodes.filter((theme) => (
     String(theme?.name || '').trim().toLowerCase() === name.toLowerCase()
-  )) || nodes[0] || null;
+  ));
+  matches.sort((left, right) => {
+    const processingDelta = Number(Boolean(right?.processing))
+      - Number(Boolean(left?.processing));
+    if (processingDelta !== 0) {
+      return processingDelta;
+    }
+    const leftCreated = Date.parse(left?.createdAt || '') || 0;
+    const rightCreated = Date.parse(right?.createdAt || '') || 0;
+    return rightCreated - leftCreated;
+  });
+  const match = matches[0] || nodes[0] || null;
 
   if (!match?.id) {
     return {
@@ -1511,6 +1537,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         },
       };
     })()
+      .then((result) => sendResponse(result))
+      .catch((error) => sendResponse({
+        ok: false,
+        error: {
+          code: 'UNEXPECTED',
+          message: String(error?.message || error),
+        },
+      }));
+    return true;
+  }
+
+  if (message?.type === 'shopifySkinsFindThemeByName') {
+    const payload = {
+      ...(message.payload || {}),
+    };
+    if (!payload.storeHandle) {
+      payload.storeHandle = storeHandleFromUrl(sender?.tab?.url);
+    }
+    findThemeByName(payload.storeHandle, payload.themeName)
       .then((result) => sendResponse(result))
       .catch((error) => sendResponse({
         ok: false,
