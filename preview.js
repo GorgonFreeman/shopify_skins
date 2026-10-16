@@ -11,13 +11,25 @@
     return `https://${ storeHandle }.myshopify.com/?preview_theme_id=${ id }`;
   }
 
+  async function copyPreviewLink(url) {
+    try {
+      await navigator.clipboard.writeText(url);
+      toast('Preview link copied.');
+    } catch (error) {
+      console.log('clipboardError', error);
+      toast('Could not copy preview link.', 'error');
+    }
+  }
+
   async function openThemePreview(themeId) {
     const storeHandle = await ThemeActions.resolveStoreHandle();
     if (!storeHandle) {
       toast('Open a store admin tab to preview themes.', 'error');
       return;
     }
-    window.open(previewUrlForTheme(storeHandle, themeId), '_blank', 'noopener,noreferrer');
+    const url = previewUrlForTheme(storeHandle, themeId);
+    await copyPreviewLink(url);
+    window.open(url, '_blank', 'noopener,noreferrer');
   }
 
   ThemeActions.register({
