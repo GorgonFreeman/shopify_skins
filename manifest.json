@@ -13,7 +13,8 @@
     "tabs"
   ],
   "host_permissions": [
-    "https://*.myshopify.com/*"
+    "https://*.myshopify.com/*",
+    "https://admin.shopify.com/*"
   ],
   "background": {
     "service_worker": "background.js"

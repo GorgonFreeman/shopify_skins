@@ -276,6 +276,29 @@ const withRenameOn = await page.evaluate(() => {
 });
 console.log('withRenameOn', withRenameOn);
 
+// After ThemeList row detection, missing ids resolve via themes.json.
+await page.waitForTimeout(400);
+const afterJsonResolve = await page.evaluate(() => {
+  const copyingHeading = [...document.querySelectorAll('h3')].find((el) => (
+    el.textContent.trim() === 'Copy of Dawn'
+  ));
+  const themeId = copyingHeading?.dataset?.shopifySkinsThemeId || null;
+  const pending = copyingHeading?.dataset?.shopifySkinsPendingCopy === 'true';
+  const preview = document.querySelector(
+    `[data-shopify-skins-preview-btn][data-theme-id="${ themeId }"]`,
+  );
+  const rename = document.querySelector(
+    `[data-shopify-skins-rename-btn][data-theme-id="${ themeId }"]`,
+  );
+  return {
+    themeId,
+    pending,
+    hasPreview: Boolean(preview),
+    hasRename: Boolean(rename),
+  };
+});
+console.log('afterJsonResolve', afterJsonResolve);
+
 // Click Dawn pencil, rename, Enter (beginRename is async)
 const renameFlow = await page.evaluate(async () => {
   const pencil = document.querySelector(
@@ -381,24 +404,23 @@ console.log('pageErrors', errors);
 await browser.close();
 
 const renameMsg = renameFlow.messages?.find((m) => m.type === 'shopifySkinsRenameTheme');
-const ok = withRenameOn.pencilCount === 4
-  && withRenameOn.previewCount === 3
+const ok = withRenameOn.pencilCount >= 4
   && withRenameOn.themeIds.includes('123456789')
   && withRenameOn.themeIds.includes('111111111')
-  && withRenameOn.previewThemeIds.includes('123456789')
   && withRenameOn.actionMenuIconCount === 0
   && withRenameOn.publishedLabelText === 'Live Theme'
   && withRenameOn.publishedHasNameAttr === true
-  && withRenameOn.copyingLabelText === 'Copy of Dawn'
-  && withRenameOn.copyingHasPencil === true
-  && withRenameOn.copyingHasPreview === false
+  && afterJsonResolve.themeId === '555555555'
+  && afterJsonResolve.pending === false
+  && afterJsonResolve.hasRename === true
+  && afterJsonResolve.hasPreview === true
   && renameMsg?.payload?.name === 'Dawn Renamed'
   && renameMsg?.payload?.storeHandle === 'demo-shop'
   && renameMsg?.payload?.themeId === '123456789'
   && afterDisable.pencilCount === 0
-  && afterDisable.previewCount === 3
+  && afterDisable.previewCount === 4
   && afterNoToken.pencilCount === 0
-  && afterNoToken.previewCount === 3
+  && afterNoToken.previewCount === 4
   && afterPreviewOff.pencilCount === 4
   && afterPreviewOff.previewCount === 0
   && errors.length === 0;

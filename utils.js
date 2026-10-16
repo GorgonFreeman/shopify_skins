@@ -19,6 +19,21 @@ function parseAdminContext(url = location.href) {
       .replace(/\.myshopify\.com$/i, '')
       .split('.')[0] || null;
   }
+  // Online Store iframe embeds admin-url as serialized JSON.
+  if (!storeHandle && typeof document !== 'undefined') {
+    const adminUrlNode = document.querySelector?.(
+      'script[type="text/json"][data-serialized-id="admin-url"]',
+    );
+    const adminUrl = adminUrlNode?.textContent?.replace(/^"|"$/g, '')
+      ?.replace(/\\u002F/g, '/')
+      ?.replace(/\\\//g, '/');
+    const fromSerialized = String(adminUrl || '').match(
+      /admin\.shopify\.com\/store\/([^/?#"]+)/,
+    );
+    if (fromSerialized?.[1]) {
+      storeHandle = fromSerialized[1];
+    }
+  }
   const themeMatch = url.match(/\/themes\/(\d+)/);
   return {
     storeHandle,
@@ -155,6 +170,14 @@ function createThemeActions() {
   let currentTheme = typeof DEFAULT_THEME !== 'undefined' ? DEFAULT_THEME : {};
   let cachedTabStoreHandle = null;
   let booted = false;
+  let themesJsonCache = {
+    storeHandle: '',
+    at: 0,
+    themes: null,
+  };
+  const themesJsonInflight = new Map();
+  const themeIdResolveInflight = new Set();
+  const THEMES_JSON_TTL_MS = 4000;
 
   function isActionLabel(text) {
     return ACTION_LABEL_RE.test(String(text || '').trim());
@@ -176,6 +199,285 @@ function createThemeActions() {
       hash |= 0;
     }
     return `pending-${ Math.abs(hash) }`;
+  }
+
+  function themesFromAdminJsonPayload(payload) {
+    if (Array.isArray(payload?.themes)) {
+      return payload.themes;
+    }
+    if (Array.isArray(payload)) {
+      return payload;
+    }
+    if (Array.isArray(payload?.data?.themes)) {
+      return payload.data.themes;
+    }
+    if (Array.isArray(payload?.themes?.nodes)) {
+      return payload.themes.nodes;
+    }
+    return [];
+  }
+
+  function pickThemeIdFromNameMatches(themes, themeName) {
+    const name = String(themeName || '').trim().toLowerCase();
+    const matches = (themes || []).filter((theme) => (
+      String(theme?.name || '').trim().toLowerCase() === name
+    ));
+    matches.sort((left, right) => {
+      const processingDelta = Number(Boolean(right?.processing))
+        - Number(Boolean(left?.processing));
+      if (processingDelta !== 0) {
+        return processingDelta;
+      }
+      const leftCreated = Date.parse(
+        left?.created_at || left?.createdAt || '',
+      ) || 0;
+      const rightCreated = Date.parse(
+        right?.created_at || right?.createdAt || '',
+      ) || 0;
+      return rightCreated - leftCreated;
+    });
+    const match = matches[0] || null;
+    const themeId = gidToId(
+      match?.admin_graphql_api_id || match?.id || match?.theme_id || '',
+    );
+    if (!themeId) {
+      return null;
+    }
+    return {
+      themeId,
+      processing: Boolean(match?.processing),
+      match,
+    };
+  }
+
+  async function fetchAdminThemesJson(storeHandle) {
+    const handle = String(storeHandle || '').trim();
+    if (!handle) {
+      return {
+        ok: false,
+        error: {
+          code: 'MISSING_ARGS',
+          message: 'Need store handle.',
+        },
+      };
+    }
+
+    const now = Date.now();
+    if (
+      themesJsonCache.storeHandle === handle
+      && themesJsonCache.themes
+      && (now - themesJsonCache.at) < THEMES_JSON_TTL_MS
+    ) {
+      return {
+        ok: true,
+        themes: themesJsonCache.themes,
+        source: 'admin-json-cache',
+      };
+    }
+
+    if (themesJsonInflight.has(handle)) {
+      return themesJsonInflight.get(handle);
+    }
+
+    const request = (async () => {
+      let response;
+      try {
+        response = await fetch(
+          `https://admin.shopify.com/store/${ handle }/themes.json`,
+          {
+            credentials: 'include',
+            headers: {
+              Accept: 'application/json',
+            },
+          },
+        );
+      } catch (error) {
+        return {
+          ok: false,
+          error: {
+            code: 'NETWORK_ERROR',
+            message: 'Could not reach admin themes.json.',
+            details: String(error?.message || error),
+          },
+        };
+      }
+
+      if (!response.ok) {
+        return {
+          ok: false,
+          error: {
+            code: response.status === 401 || response.status === 403
+              ? 'AUTH_ERROR'
+              : 'HTTP_ERROR',
+            message: `themes.json returned HTTP ${ response.status }.`,
+          },
+        };
+      }
+
+      let payload;
+      try {
+        payload = await response.json();
+      } catch (error) {
+        return {
+          ok: false,
+          error: {
+            code: 'BAD_RESPONSE',
+            message: 'themes.json returned non-JSON.',
+            details: String(error?.message || error),
+          },
+        };
+      }
+
+      const themes = themesFromAdminJsonPayload(payload);
+      themesJsonCache = {
+        storeHandle: handle,
+        at: Date.now(),
+        themes,
+      };
+      return {
+        ok: true,
+        themes,
+        source: 'admin-json',
+      };
+    })();
+
+    themesJsonInflight.set(handle, request);
+    try {
+      return await request;
+    } finally {
+      themesJsonInflight.delete(handle);
+    }
+  }
+
+  async function findThemeIdFromAdminJson(storeHandle, themeName) {
+    const list = await fetchAdminThemesJson(storeHandle);
+    if (!list.ok) {
+      return list;
+    }
+    const picked = pickThemeIdFromNameMatches(list.themes, themeName);
+    if (!picked) {
+      return {
+        ok: false,
+        error: {
+          code: 'THEME_NOT_FOUND',
+          message: `No theme named “${ themeName }” in themes.json.`,
+        },
+      };
+    }
+    return {
+      ok: true,
+      themeId: picked.themeId,
+      source: list.source || 'admin-json',
+      processing: picked.processing,
+    };
+  }
+
+  async function resolveThemeIdByName(storeHandle, themeName, {
+    attempts = 1,
+    delayMs = 750,
+  } = {}) {
+    let lastError = null;
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      try {
+        const apiResult = await chrome.runtime.sendMessage({
+          type: 'shopifySkinsFindThemeByName',
+          payload: {
+            storeHandle,
+            themeName,
+          },
+        });
+        if (apiResult?.ok && apiResult?.data?.theme?.id) {
+          return {
+            ok: true,
+            themeId: gidToId(apiResult.data.theme.id),
+            source: 'admin-api',
+            processing: Boolean(apiResult.data.theme.processing),
+          };
+        }
+        lastError = apiResult?.error || null;
+
+        const jsonResult = await findThemeIdFromAdminJson(storeHandle, themeName);
+        if (jsonResult.ok) {
+          return jsonResult;
+        }
+        lastError = jsonResult.error || lastError;
+      } catch (error) {
+        lastError = {
+          message: String(error?.message || error),
+        };
+      }
+      if (attempt < attempts - 1) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+    return {
+      ok: false,
+      error: lastError,
+    };
+  }
+
+  async function resolveMissingThemeListIds() {
+    const storeHandle = await resolveStoreHandle();
+    if (!storeHandle) {
+      return;
+    }
+
+    const rows = collectThemeListRows();
+    let changed = false;
+
+    await Promise.all(rows.map(async (row) => {
+      const heading = row.querySelector?.('h3, h2, h1');
+      if (!heading || !looksLikeThemeName(heading)) {
+        return;
+      }
+
+      const ids = themeIdsIn(row);
+      if (ids.size === 1) {
+        const onlyId = [...ids][0];
+        if (heading.dataset.shopifySkinsThemeId !== onlyId) {
+          heading.dataset.shopifySkinsThemeId = onlyId;
+          delete heading.dataset.shopifySkinsPendingCopy;
+          changed = true;
+        }
+        return;
+      }
+
+      const existingId = heading.dataset.shopifySkinsThemeId || '';
+      if (existingId && !isPendingThemeId(existingId)) {
+        return;
+      }
+
+      const name = themeNameFromLabel(heading) || cleanText(heading);
+      if (!name) {
+        return;
+      }
+
+      const inflightKey = `${ storeHandle }:${ name.toLowerCase() }`;
+      if (themeIdResolveInflight.has(inflightKey)) {
+        return;
+      }
+      themeIdResolveInflight.add(inflightKey);
+      try {
+        const resolved = await resolveThemeIdByName(storeHandle, name, {
+          attempts: 1,
+        });
+        if (!resolved.ok || !resolved.themeId) {
+          return;
+        }
+        if (heading.dataset.shopifySkinsThemeId !== resolved.themeId) {
+          heading.dataset.shopifySkinsThemeId = resolved.themeId;
+          heading.dataset.shopifySkinsThemeName = name;
+          delete heading.dataset.shopifySkinsPendingCopy;
+          changed = true;
+        }
+      } finally {
+        themeIdResolveInflight.delete(inflightKey);
+      }
+    }));
+
+    if (changed) {
+      scheduleDecorate();
+    }
   }
 
   function splitLastSavedLabel(text) {
@@ -374,11 +676,28 @@ function createThemeActions() {
     return ids;
   }
 
+  const THEME_LIST_ROW_SELECTOR = 'ul[class*="_ThemeList_"] > li';
+
+  function themeListRowFor(element) {
+    if (!(element instanceof HTMLElement)) {
+      return null;
+    }
+    const row = element.closest?.(THEME_LIST_ROW_SELECTOR);
+    return row instanceof HTMLElement ? row : null;
+  }
+
+  function collectThemeListRows() {
+    return queryAllDeep(THEME_LIST_ROW_SELECTOR).filter((el, index, all) => (
+      all.indexOf(el) === index
+    ));
+  }
+
   function isCopyingThemeRow(element) {
     if (!(element instanceof HTMLElement)) {
       return false;
     }
-    const scope = element.closest('li')
+    const scope = themeListRowFor(element)
+      || element.closest('li')
       || element.closest('[class*="ThemeContent"]')
       || element.parentElement;
     if (!scope?.querySelectorAll) {
@@ -389,6 +708,11 @@ function createThemeActions() {
   }
 
   function findCardRoot(fromEl) {
+    const themeListRow = themeListRowFor(fromEl);
+    if (themeListRow) {
+      return themeListRow;
+    }
+
     const cardSelector = [
       '.Polaris-ShadowBevel',
       '.Polaris-LegacyCard',
@@ -408,7 +732,7 @@ function createThemeActions() {
 
     for (let depth = 0; depth < 12 && node; depth += 1) {
       // Don't absorb sibling theme rows from the library list.
-      if (node.matches?.('[class*="ThemeList"]')) {
+      if (node.matches?.('[class*="_ThemeList_"], [class*="ThemeList"]')) {
         break;
       }
       const ids = themeIdsIn(node);
@@ -542,29 +866,33 @@ function createThemeActions() {
       });
     });
 
-    // Duplicating themes: spinner + "Copying your theme", often with no /themes/{id} yet.
-    queryAllDeep('[class*="ThemeStatus"]').forEach((statusEl) => {
-      if (!COPYING_STATUS_RE.test(cleanText(statusEl))) {
-        return;
-      }
-
-      const card = statusEl.closest('li')
-        || statusEl.closest('[class*="ThemeContent"]')?.parentElement
-        || findCardRoot(statusEl);
-      if (!card) {
-        return;
-      }
-
-      const heading = card.querySelector?.('h3, h2, h1');
+    // Library rows: ul._ThemeList_* > li (includes "Copying your theme" with no id yet).
+    // If the DOM has no theme id, resolveMissingThemeListIds() fills it from
+    // Admin API / themes.json using the row title.
+    collectThemeListRows().forEach((row) => {
+      const heading = row.querySelector?.('h3, h2, h1');
       if (!heading || !looksLikeThemeName(heading)) {
         return;
       }
 
       const name = themeNameFromLabel(heading) || cleanText(heading);
-      const realId = findThemeIdNear(heading) || findThemeIdNear(card);
+      const ids = themeIdsIn(row);
+      const resolvedId = heading.dataset.shopifySkinsThemeId
+        && !isPendingThemeId(heading.dataset.shopifySkinsThemeId)
+        ? heading.dataset.shopifySkinsThemeId
+        : null;
+      const realId = (ids.size === 1 ? [...ids][0] : null) || resolvedId;
+      const copying = [...row.querySelectorAll('[class*="ThemeStatus"]')]
+        .some((statusEl) => COPYING_STATUS_RE.test(cleanText(statusEl)));
+
+      if (!realId && !copying) {
+        return;
+      }
+
       const themeId = realId || pendingThemeKey(name);
       heading.dataset.shopifySkinsThemeName = name;
       if (realId) {
+        heading.dataset.shopifySkinsThemeId = realId;
         delete heading.dataset.shopifySkinsPendingCopy;
       } else {
         heading.dataset.shopifySkinsPendingCopy = 'true';
@@ -616,8 +944,12 @@ function createThemeActions() {
       return;
     }
 
-    const pendingCopy = labelEl.dataset.shopifySkinsPendingCopy === 'true';
+    const pendingCopy = labelEl.dataset.shopifySkinsPendingCopy === 'true'
+      || isPendingThemeId(labelEl.dataset.shopifySkinsThemeId);
     let themeId = labelEl.dataset.shopifySkinsThemeId || findThemeIdNear(labelEl);
+    if (themeId && isPendingThemeId(themeId) && !pendingCopy) {
+      themeId = '';
+    }
     if (!themeId && pendingCopy) {
       themeId = pendingThemeKey(themeNameFromLabel(labelEl));
     }
@@ -629,6 +961,16 @@ function createThemeActions() {
     const parent = labelEl.parentElement;
     if (!parent) {
       return;
+    }
+
+    // Drop stale pending buttons once a real theme id is known.
+    let sibling = labelEl.nextElementSibling;
+    while (sibling && isActionButton(sibling)) {
+      const next = sibling.nextElementSibling;
+      if (sibling.dataset.themeId && sibling.dataset.themeId !== themeId) {
+        sibling.remove();
+      }
+      sibling = next;
     }
 
     const colour = actionColour();
@@ -696,6 +1038,11 @@ function createThemeActions() {
 
     collectThemeNameTargets().forEach((labelEl) => {
       ensureButtonsForLabel(labelEl);
+    });
+
+    // Fill missing ThemeList ids from title via Admin API / themes.json.
+    resolveMissingThemeListIds().catch((error) => {
+      console.log('resolveMissingThemeListIdsError', error);
     });
   }
 
@@ -815,6 +1162,8 @@ function createThemeActions() {
     labelTextWithName,
     isPendingThemeId,
     pendingThemeKey,
+    resolveThemeIdByName,
+    findThemeIdFromAdminJson,
     actionColour,
     toast,
     queryAllDeep,
